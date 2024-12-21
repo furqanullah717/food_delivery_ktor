@@ -23,7 +23,7 @@ fun Route.menuItemRoutes() {
                 HttpStatusCode.BadRequest
             )
             val menuItems = MenuItemService.getMenuItemsByRestaurant(UUID.fromString(restaurantId))
-            call.respond(menuItems)
+            call.respond(mapOf("foodItems" to menuItems))
         }
 
         /**

@@ -4,9 +4,7 @@ import com.codewithfk.configs.FacebookAuthConfig
 import com.codewithfk.configs.GoogleAuthConfig
 import com.codewithfk.database.DatabaseFactory
 import com.codewithfk.database.seedDatabase
-import com.codewithfk.routs.authRoutes
-import com.codewithfk.routs.categoryRoutes
-import com.codewithfk.routs.restaurantRoutes
+import com.codewithfk.routs.*
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.serialization.kotlinx.json.*
@@ -74,5 +72,8 @@ fun Application.module() {
         authRoutes()
         categoryRoutes()
         restaurantRoutes()
+        menuItemRoutes()
+        orderRoutes()
+        cartRoutes()
     }
 }

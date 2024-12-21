@@ -27,9 +27,8 @@ object DatabaseFactory {
                 UsersTable,
                 CategoriesTable,
                 RestaurantsTable,
-//                MenuItemsTable,
-//                OrdersTable,
-//                ReviewsTable
+                MenuItemsTable,
+                OrdersTable,
             )
         }
 
@@ -194,6 +193,63 @@ fun Application.seedDatabase() {
                 println("Restaurants seeded: ${restaurants.map { it.first }}")
             } else {
                 println("Restaurants already exist.")
+            }
+
+            if (MenuItemsTable.selectAll().empty()) {
+                println("Seeding menu items...")
+
+                val restaurants =
+                    RestaurantsTable.selectAll().associate { it[RestaurantsTable.name] to it[RestaurantsTable.id] }
+
+                val menuItems = listOf(
+                    Pair(
+                        "Pizza Palace", listOf(
+                            Triple("Margherita Pizza", "Classic cheese pizza with fresh basil", Pair(12.99, "https://foodbyjonister.com/wp-content/uploads/2020/01/pizzadough18.jpg")),
+                            Triple("Pepperoni Pizza", "Pepperoni, mozzarella, and marinara sauce", Pair(14.99, "https://www.cobsbread.com/us/wp-content//uploads/2022/09/Pepperoni-pizza-850x630-1.png")),
+                            Triple("Veggie Supreme", "Loaded with bell peppers, onions, and olives", Pair(13.99, "https://www.thecandidcooks.com/wp-content/uploads/2022/07/california-veggie-pizza-feature.jpg")),
+                            Triple("Special Pizza", "Classic cheese pizza with fresh basil", Pair(21.99, "https://eatlanders.com/wp-content/uploads/2021/05/new-pizza-pic-e1672671486218.jpeg")),
+                            Triple("Crown Crust Pizza", "Pepperoni, mozzarella, and marinara sauce", Pair(19.99, "https://wenewsenglish.pk/wp-content/uploads/2024/05/Recipe-1.jpg")),
+                            Triple(
+                                "Thin Crust Supreme",
+                                "Loaded with bell peppers, onions, and olives",
+                                Pair(18.99, "https://cdn.apartmenttherapy.info/image/upload/f_jpg,q_auto:eco,c_fill,g_auto,w_1500,ar_4:3/k%2Farchive%2Fcb2e9502cd9da3468caa944e15527b19bce68a8e")
+                            ),
+                            Triple("Malai Boti Pizza", "Classic cheese pizza with fresh basil", Pair(14.99, "https://www.tastekahani.com/wp-content/uploads/2022/05/71.Malai-Boti-Pizza.jpg")),
+                            Triple("Tikka Pizza", "Pepperoni, mozzarella, and marinara sauce", Pair(16.99, "https://onestophalal.com/cdn/shop/articles/tikka_masala_pizza-1694014914105_1200x.jpg?v=1694568363")),
+                            Triple(
+                                "Cheeze Crust Supreme",
+                                "Loaded with bell peppers, onions, and olives",
+                                Pair(17.99, "https://www.allrecipes.com/thmb/ofh4mVETQPBbcOb4uCFQr92cqb4=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/2612551-cheesy-crust-skillet-pizza-The-Gruntled-Gourmand-1x1-1-f9a328af9dfe487a9fc408f581927696.jpg")
+                            )
+                        )
+                    ),
+                    Pair(
+                        "Burger Haven", listOf(
+                            Triple("Classic Cheeseburger", "Juicy beef patty with cheddar cheese", Pair(10.99, "https://rhubarbandcod.com/wp-content/uploads/2022/06/The-Classic-Cheeseburger-1.jpg")),
+                            Triple("Veggie Burger", "Grilled veggie patty with avocado", Pair(9.99, "https://www.foodandwine.com/thmb/pwFie7NRkq4SXMDJU6QKnUKlaoI=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/Ultimate-Veggie-Burgers-FT-Recipe-0821-5d7532c53a924a7298d2175cf1d4219f.jpg"))
+                        )
+                    )
+                )
+
+                MenuItemsTable.batchInsert(menuItems.flatMap { (restaurantName, items) ->
+                    val restaurantId = restaurants[restaurantName] ?: error("Restaurant not found: $restaurantName")
+                    items.map { menuItem ->
+                        Triple(restaurantId, menuItem.first, menuItem.second to menuItem.third)
+                    }
+                }) { menuItem ->
+                    this[MenuItemsTable.id] = UUID.randomUUID()
+                    this[MenuItemsTable.restaurantId] = menuItem.first
+                    this[MenuItemsTable.name] = menuItem.second
+                    this[MenuItemsTable.description] = menuItem.third.first
+                    this[MenuItemsTable.price] = menuItem.third.second.first
+                    this[MenuItemsTable.imageUrl] = menuItem.third.second.second
+                    this[MenuItemsTable.arModelUrl] = null // Add if you want AR URLs
+                    this[MenuItemsTable.createdAt] = org.jetbrains.exposed.sql.javatime.CurrentTimestamp()
+                }
+
+                println("Menu items seeded for all restaurants.")
+            } else {
+                println("Menu items already exist.")
             }
         }
     }
