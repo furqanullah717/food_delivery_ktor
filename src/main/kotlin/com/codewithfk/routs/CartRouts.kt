@@ -1,7 +1,10 @@
 package com.codewithfk.routs
 
 import com.codewithfk.model.AddToCartRequest
+import com.codewithfk.model.CartItem
+import com.codewithfk.model.CheckoutModel
 import com.codewithfk.services.CartService
+import com.codewithfk.services.OrderService
 import com.codewithfk.utils.respondError
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -10,7 +13,14 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
 import java.util.*
+
+@Serializable
+data class CartResponse(
+    val items: List<CartItem>,
+    val checkoutDetails: CheckoutModel
+)
 
 fun Route.cartRoutes() {
     route("/cart") {
@@ -21,7 +31,13 @@ fun Route.cartRoutes() {
             val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
                 ?: return@get call.respondError("Unauthorized.", HttpStatusCode.Unauthorized)
             val cartItems = CartService.getCartItems(UUID.fromString(userId))
-            call.respond(mapOf("items" to cartItems))
+            val checkoutDetails = OrderService.getCheckoutDetails(UUID.fromString(userId))
+            call.respond(
+                CartResponse(
+                    items = cartItems,
+                    checkoutDetails = checkoutDetails
+                )
+            )
         }
 
         /**
@@ -31,7 +47,7 @@ fun Route.cartRoutes() {
             val uid = call.principal<JWTPrincipal>()?.payload
             val userId = uid?.getClaim("userId")?.asString()
                 ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized.")
-            val request = call.receive< AddToCartRequest>()
+            val request = call.receive<AddToCartRequest>()
             val restaurantId = UUID.fromString(
                 request.restaurantId as? String ?: return@post call.respondError(
                     HttpStatusCode.BadRequest,

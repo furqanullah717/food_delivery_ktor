@@ -4,6 +4,7 @@ import com.codewithfk.database.CartTable
 import com.codewithfk.database.MenuItemsTable
 import com.codewithfk.database.OrderItemsTable
 import com.codewithfk.database.OrdersTable
+import com.codewithfk.model.CheckoutModel
 import com.codewithfk.model.Order
 import com.codewithfk.utils.StripeUtils
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -15,6 +16,40 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 object OrderService {
+
+    fun getCheckoutDetails(userId: UUID): CheckoutModel {
+        return transaction {
+            val cartItems =
+                CartTable.select { (CartTable.userId eq userId) }
+
+            if (cartItems.empty()) {
+                return@transaction CheckoutModel(
+                    subTotal = 0.0,
+                    totalAmount = 0.0,
+                    tax = 0.0,
+                    deliveryFee = 0.0
+                )
+            }
+
+            val totalAmount = cartItems.sumOf {
+                val quantity = it[CartTable.quantity]
+                val price = MenuItemsTable.select { MenuItemsTable.id eq it[CartTable.menuItemId] }
+                    .single()[MenuItemsTable.price]
+                quantity * price
+            }
+
+            val tax = totalAmount * 0.1
+            val deliveryFee = 1.0
+            val total = totalAmount + tax + deliveryFee
+
+            CheckoutModel(
+                subTotal = totalAmount,
+                totalAmount = total,
+                tax = tax,
+                deliveryFee = deliveryFee
+            )
+        }
+    }
 
     fun placeOrder(userId: UUID, restaurantId: UUID, addressId: UUID): UUID {
         return transaction {

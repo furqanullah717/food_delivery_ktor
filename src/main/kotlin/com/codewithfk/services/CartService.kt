@@ -1,7 +1,9 @@
 package com.codewithfk.services
 
 import com.codewithfk.database.CartTable
+import com.codewithfk.database.MenuItemsTable
 import com.codewithfk.model.CartItem
+import com.codewithfk.model.MenuItem
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -11,13 +13,21 @@ object CartService {
 
     fun getCartItems(userId: UUID): List<CartItem> {
         return transaction {
-            CartTable.select { CartTable.userId eq userId }
+            (CartTable innerJoin MenuItemsTable)
+                .select { CartTable.userId eq userId }
                 .map {
                     CartItem(
                         id = it[CartTable.id].toString(),
                         userId = it[CartTable.userId].toString(),
                         restaurantId = it[CartTable.restaurantId].toString(),
-                        menuItemId = it[CartTable.menuItemId].toString(),
+                        menuItemId = MenuItem(
+                            id = it[MenuItemsTable.id].toString(),
+                            name = it[MenuItemsTable.name],
+                            description = it[MenuItemsTable.description],
+                            price = it[MenuItemsTable.price],
+                            restaurantId = it[MenuItemsTable.restaurantId].toString(),
+                            imageUrl = it[MenuItemsTable.imageUrl]
+                        ),
                         quantity = it[CartTable.quantity],
                         addedAt = it[CartTable.addedAt].toString()
                     )
