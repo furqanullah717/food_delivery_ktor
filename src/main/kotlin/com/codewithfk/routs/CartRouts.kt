@@ -1,5 +1,6 @@
 package com.codewithfk.routs
 
+import com.codewithfk.model.AddToCartRequest
 import com.codewithfk.services.CartService
 import com.codewithfk.utils.respondError
 import io.ktor.http.*
@@ -10,7 +11,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.util.*
-import kotlin.text.get
 
 fun Route.cartRoutes() {
     route("/cart") {
@@ -28,22 +28,23 @@ fun Route.cartRoutes() {
          * Add an item to the cart
          */
         post {
-            val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+            val uid = call.principal<JWTPrincipal>()?.payload
+            val userId = uid?.getClaim("userId")?.asString()
                 ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized.")
-            val params = call.receive<Map<String, Any>>()
+            val request = call.receive< AddToCartRequest>()
             val restaurantId = UUID.fromString(
-                params["restaurantId"] as? String ?: return@post call.respondError(
+                request.restaurantId as? String ?: return@post call.respondError(
                     HttpStatusCode.BadRequest,
                     "Restaurant ID is required."
                 )
             )
             val menuItemId = UUID.fromString(
-                params["menuItemId"] as? String ?: return@post call.respondError(
+                request.menuItemId as? String ?: return@post call.respondError(
                     HttpStatusCode.BadRequest,
                     "Menu item ID is required."
                 )
             )
-            val quantity = (params["quantity"] as? Int) ?: return@post call.respondError(
+            val quantity = (request.quantity as? Int) ?: return@post call.respondError(
                 HttpStatusCode.BadRequest,
                 "Quantity is required."
             )

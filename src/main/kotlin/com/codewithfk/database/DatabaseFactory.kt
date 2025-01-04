@@ -29,6 +29,7 @@ object DatabaseFactory {
                 RestaurantsTable,
                 MenuItemsTable,
                 OrdersTable,
+                CartTable,
             )
         }
 

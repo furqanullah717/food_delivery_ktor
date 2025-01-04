@@ -24,3 +24,10 @@ data class OrderItem(
     val menuItemId: String,
     val quantity: Int
 )
+
+@Serializable
+data class AddToCartRequest(
+    val restaurantId: String,
+    val menuItemId: String,
+    val quantity: Int
+)

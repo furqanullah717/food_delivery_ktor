@@ -73,7 +73,11 @@ fun Application.module() {
         categoryRoutes()
         restaurantRoutes()
         menuItemRoutes()
-        orderRoutes()
-        cartRoutes()
+        authenticate {
+
+            orderRoutes()
+            cartRoutes()
+        }
+
     }
 }
