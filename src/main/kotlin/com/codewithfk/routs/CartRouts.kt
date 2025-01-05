@@ -3,6 +3,7 @@ package com.codewithfk.routs
 import com.codewithfk.model.AddToCartRequest
 import com.codewithfk.model.CartItem
 import com.codewithfk.model.CheckoutModel
+import com.codewithfk.model.UpdateCartItemRequest
 import com.codewithfk.services.CartService
 import com.codewithfk.services.OrderService
 import com.codewithfk.utils.respondError
@@ -72,16 +73,14 @@ fun Route.cartRoutes() {
         /**
          * Update item quantity in the cart
          */
-        patch("/{cartItemId}") {
-            val cartItemId = call.parameters["cartItemId"] ?: return@patch call.respondError(
-                HttpStatusCode.BadRequest,
-                "Cart item ID is required."
-            )
-            val params = call.receive<Map<String, Int>>()
-            val quantity =
-                params["quantity"] ?: return@patch call.respondError(HttpStatusCode.BadRequest, "Quantity is required.")
+        patch {
+            val cartItem = call.receive<UpdateCartItemRequest>()
+            val quantity = cartItem.quantity
+            if (quantity == 0) {
+                call.respondError(HttpStatusCode.BadRequest, "Quantity cannot be zero")
+            }
 
-            val success = CartService.updateCartItemQuantity(UUID.fromString(cartItemId), quantity)
+            val success = CartService.updateCartItemQuantity(UUID.fromString(cartItem.cartItemId), quantity)
             if (success) call.respond(mapOf("message" to "Cart item updated successfully"))
             else call.respondError(HttpStatusCode.NotFound, "Cart item not found")
         }
