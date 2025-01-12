@@ -5,6 +5,7 @@ import com.codewithfk.model.Category
 import io.ktor.http.*
 import io.ktor.server.application.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.javatime.datetime
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 import kotlin.text.insert
@@ -23,16 +24,22 @@ object DatabaseFactory {
         )
 
         transaction {
+            // Drop tables in correct order
+            SchemaUtils.drop(OrderItemsTable)
+            SchemaUtils.drop(OrdersTable)
+            
+            // Create tables in correct order
             SchemaUtils.create(
                 UsersTable,
                 CategoriesTable,
                 RestaurantsTable,
                 MenuItemsTable,
+                AddressesTable,
                 OrdersTable,
-                CartTable,
+                OrderItemsTable,
+                CartTable
             )
         }
-
     }
 }
 
@@ -251,6 +258,100 @@ fun Application.seedDatabase() {
                 println("Menu items seeded for all restaurants.")
             } else {
                 println("Menu items already exist.")
+            }
+        }
+    }
+}
+
+fun Application.migrateDatabase() {
+    transaction {
+        // Check if orders table needs migration
+        val needsOrdersMigration = try {
+            OrdersTable.selectAll().limit(1).count() > 0
+        } catch (e: Exception) {
+            true
+        }
+
+        if (needsOrdersMigration) {
+            try {
+                // First, backup existing data if any
+                val existingOrders = try {
+                    OrdersTable.selectAll().map { row ->
+                        mapOf(
+                            "id" to row[OrdersTable.id],
+                            "userId" to row[OrdersTable.userId],
+                            "restaurantId" to row[OrdersTable.restaurantId],
+                            "addressId" to row[OrdersTable.addressId],
+                            "status" to row[OrdersTable.status],
+                            "paymentStatus" to row[OrdersTable.paymentStatus],
+                            "stripePaymentIntentId" to row[OrdersTable.stripePaymentIntentId],
+                            "totalAmount" to row[OrdersTable.totalAmount],
+                            "createdAt" to row[OrdersTable.createdAt],
+                            "updatedAt" to row[OrdersTable.updatedAt]
+                        )
+                    }
+                } catch (e: Exception) {
+                    emptyList()
+                }
+
+                val existingOrderItems = try {
+                    OrderItemsTable.selectAll().map { row ->
+                        mapOf(
+                            "id" to row[OrderItemsTable.id],
+                            "orderId" to row[OrderItemsTable.orderId],
+                            "menuItemId" to row[OrderItemsTable.menuItemId],
+                            "quantity" to row[OrderItemsTable.quantity]
+                        )
+                    }
+                } catch (e: Exception) {
+                    emptyList()
+                }
+
+                // Drop existing tables if they exist
+                SchemaUtils.drop(OrderItemsTable)
+                SchemaUtils.drop(OrdersTable)
+
+                // Create tables with correct structure
+                SchemaUtils.create(OrdersTable)
+                SchemaUtils.create(OrderItemsTable)
+
+                // Restore data if we had any
+                existingOrders.forEach { order ->
+                    OrdersTable.insert {
+                        it[id] = order["id"] as UUID
+                        it[userId] = order["userId"] as UUID
+                        it[restaurantId] = order["restaurantId"] as UUID
+                        it[addressId] = order["addressId"] as UUID
+                        it[status] = order["status"] as String
+                        it[paymentStatus] = order["paymentStatus"] as String
+                        it[stripePaymentIntentId] = order["stripePaymentIntentId"] as String?
+                        it[totalAmount] = order["totalAmount"] as Double
+                        it[createdAt] = order["createdAt"] as java.time.LocalDateTime
+                        it[updatedAt] = order["updatedAt"] as java.time.LocalDateTime
+                    }
+                }
+
+                existingOrderItems.forEach { item ->
+                    OrderItemsTable.insert {
+                        it[id] = item["id"] as UUID
+                        it[orderId] = item["orderId"] as UUID
+                        it[menuItemId] = item["menuItemId"] as UUID
+                        it[quantity] = item["quantity"] as Int
+                    }
+                }
+
+                // Create indexes
+                exec("""
+                    CREATE INDEX IF NOT EXISTS orders_user_id_idx ON orders(user_id);
+                    CREATE INDEX IF NOT EXISTS orders_restaurant_id_idx ON orders(restaurant_id);
+                    CREATE INDEX IF NOT EXISTS order_items_order_id_idx ON order_items(order_id);
+                """)
+
+                println("Migration completed successfully")
+
+            } catch (e: Exception) {
+                println("Migration failed: ${e.message}")
+                throw e
             }
         }
     }

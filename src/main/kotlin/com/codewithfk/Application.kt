@@ -3,6 +3,7 @@ package com.codewithfk
 import com.codewithfk.configs.FacebookAuthConfig
 import com.codewithfk.configs.GoogleAuthConfig
 import com.codewithfk.database.DatabaseFactory
+import com.codewithfk.database.migrateDatabase
 import com.codewithfk.database.seedDatabase
 import com.codewithfk.routs.*
 import io.ktor.client.*
@@ -65,8 +66,9 @@ fun Application.module() {
             urlProvider = { FacebookAuthConfig.redirectUri }
         }
     }
-    DatabaseFactory.init() // Initialize the database\
-    seedDatabase()
+    DatabaseFactory.init() // Initialize the database
+    migrateDatabase()     // Run migrations if needed
+    seedDatabase()        // Seed the database
 
     routing {
         authRoutes()
@@ -77,6 +79,7 @@ fun Application.module() {
             orderRoutes()
             cartRoutes()
             addressRoutes()
+            paymentRoutes()
         }
     }
 }

@@ -81,18 +81,18 @@ object AddressesTable : Table("addresses") {
         get() = PrimaryKey(id)
 }
 object OrdersTable : Table("orders") {
-    val id = uuid("id").autoGenerate()
+    val id = uuid("id").autoGenerate().uniqueIndex()
     val userId = uuid("user_id").references(UsersTable.id)
     val restaurantId = uuid("restaurant_id").references(RestaurantsTable.id)
     val addressId = uuid("address_id").references(AddressesTable.id)
-    val status = varchar("status", 50).default("Pending") // Pending, Preparing, Picked Up, Delivered
-    val paymentStatus = varchar("payment_status", 50).default("Pending") // Pending, Paid, Failed
+    val status = varchar("status", 50).default("Pending")
+    val paymentStatus = varchar("payment_status", 50).default("Pending")
     val stripePaymentIntentId = varchar("stripe_payment_intent_id", 255).nullable()
     val totalAmount = double("total_amount")
     val createdAt = datetime("created_at").defaultExpression(org.jetbrains.exposed.sql.javatime.CurrentTimestamp())
     val updatedAt = datetime("updated_at").defaultExpression(org.jetbrains.exposed.sql.javatime.CurrentTimestamp())
-    override val primaryKey: PrimaryKey
-        get() = PrimaryKey(AddressesTable.id)
+    
+    override val primaryKey = PrimaryKey(id)
 }
 
 object OrderItemsTable : Table("order_items") {
@@ -100,6 +100,6 @@ object OrderItemsTable : Table("order_items") {
     val orderId = uuid("order_id").references(OrdersTable.id)
     val menuItemId = uuid("menu_item_id").references(MenuItemsTable.id)
     val quantity = integer("quantity")
-    override val primaryKey: PrimaryKey
-        get() = PrimaryKey(AddressesTable.id)
+    
+    override val primaryKey = PrimaryKey(id)
 }

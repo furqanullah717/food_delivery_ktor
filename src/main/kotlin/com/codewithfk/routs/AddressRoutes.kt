@@ -1,7 +1,9 @@
 package com.codewithfk.routs
 
 import com.codewithfk.model.Address
+import com.codewithfk.model.ReverseGeocodeRequest
 import com.codewithfk.services.AddressService
+import com.codewithfk.services.GeocodingService
 import com.codewithfk.utils.respondError
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -84,6 +86,22 @@ fun Route.addressRoutes() {
                     call.respond(mapOf("message" to "Address deleted successfully"))
                 } else {
                     call.respondError(HttpStatusCode.NotFound, "Address not found")
+                }
+            }
+
+            post("/reverse-geocode") {
+                try {
+                    val request = call.receive<ReverseGeocodeRequest>()
+                    val address = GeocodingService.reverseGeocode(
+                        latitude = request.latitude,
+                        longitude = request.longitude
+                    )
+                    call.respond(address)
+                } catch (e: Exception) {
+                    call.respondError(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Error getting address from coordinates"
+                    )
                 }
             }
         }

@@ -1,17 +1,14 @@
 package com.codewithfk.services
 
-import com.codewithfk.database.CartTable
-import com.codewithfk.database.MenuItemsTable
-import com.codewithfk.database.OrderItemsTable
-import com.codewithfk.database.OrdersTable
+import com.codewithfk.database.*
 import com.codewithfk.model.CheckoutModel
 import com.codewithfk.model.Order
+import com.codewithfk.model.PlaceOrderRequest
+import com.codewithfk.model.OrderItem
+import com.codewithfk.model.Address
 import com.codewithfk.utils.StripeUtils
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
@@ -51,13 +48,28 @@ object OrderService {
         }
     }
 
-    fun placeOrder(userId: UUID, restaurantId: UUID, addressId: UUID): UUID {
+    fun placeOrder(userId: UUID, request: PlaceOrderRequest, paymentIntentId: String? = null): UUID {
         return transaction {
-            val cartItems =
-                CartTable.select { (CartTable.userId eq userId) and (CartTable.restaurantId eq restaurantId) }
+            // Verify address belongs to user
+            val address = AddressService.getAddressById(UUID.fromString(request.addressId))
+                ?: throw IllegalStateException("Address not found")
+            
+            if (address.userId != userId.toString()) {
+                throw IllegalStateException("Address does not belong to user")
+            }
+
+            // Get cart items
+            val cartItems = CartTable.select { CartTable.userId eq userId }
 
             if (cartItems.empty()) {
                 throw IllegalStateException("Cart is empty")
+            }
+
+            // Verify all items are from the same restaurant
+            val restaurantId = cartItems.first()[CartTable.restaurantId]
+            val allSameRestaurant = cartItems.all { it[CartTable.restaurantId] == restaurantId }
+            if (!allSameRestaurant) {
+                throw IllegalStateException("All items must be from the same restaurant")
             }
 
             // Calculate total amount
@@ -68,19 +80,18 @@ object OrderService {
                 quantity * price
             }
 
-            // Create Stripe payment intent
-            val stripePaymentIntentId = StripeUtils.createPaymentIntent((totalAmount * 100).toLong())
-
-            // Create a new order
+            // Create order
             val orderId = OrdersTable.insert {
                 it[this.userId] = userId
                 it[this.restaurantId] = restaurantId
-                it[this.addressId] = addressId
+                it[this.addressId] = UUID.fromString(request.addressId)
                 it[this.totalAmount] = totalAmount
-                it[this.stripePaymentIntentId] = stripePaymentIntentId
+                it[this.status] = "Pending"
+                it[this.paymentStatus] = if (paymentIntentId != null) "Paid" else "Pending"
+                it[this.stripePaymentIntentId] = paymentIntentId
             } get OrdersTable.id
 
-            // Add cart items to the order
+            // Create order items
             cartItems.forEach { cartItem ->
                 OrderItemsTable.insert {
                     it[this.orderId] = orderId
@@ -89,8 +100,8 @@ object OrderService {
                 }
             }
 
-            // Clear the cart
-            CartTable.deleteWhere { (CartTable.userId eq userId) and (CartTable.restaurantId eq restaurantId) }
+            // Clear cart
+            CartTable.deleteWhere { CartTable.userId eq userId }
 
             orderId
         }
@@ -99,18 +110,51 @@ object OrderService {
     fun getOrdersByUser(userId: UUID): List<Order> {
         return transaction {
             OrdersTable.select { OrdersTable.userId eq userId }
-                .map {
+                .map { orderRow ->
+                    val orderId = orderRow[OrdersTable.id]
+                    
+                    // Get address
+                    val address = AddressesTable.select {
+                        AddressesTable.id eq orderRow[OrdersTable.addressId] 
+                    }.map { addressRow ->
+                        Address(
+                            id = addressRow[AddressesTable.id].toString(),
+                            userId = addressRow[AddressesTable.userId].toString(),
+                            addressLine1 = addressRow[AddressesTable.addressLine1],
+                            addressLine2 = addressRow[AddressesTable.addressLine2],
+                            city = addressRow[AddressesTable.city],
+                            state = addressRow[AddressesTable.state],
+                            zipCode = addressRow[AddressesTable.zipCode],
+                            country = addressRow[AddressesTable.country],
+                            latitude = addressRow[AddressesTable.latitude],
+                            longitude = addressRow[AddressesTable.longitude]
+                        )
+                    }.singleOrNull()
+
+                    // Get order items
+                    val items = OrderItemsTable.select { 
+                        OrderItemsTable.orderId eq orderId 
+                    }.map { itemRow ->
+                        OrderItem(
+                            id = itemRow[OrderItemsTable.id].toString(),
+                            orderId = orderId.toString(),
+                            menuItemId = itemRow[OrderItemsTable.menuItemId].toString(),
+                            quantity = itemRow[OrderItemsTable.quantity]
+                        )
+                    }
+
                     Order(
-                        id = it[OrdersTable.id].toString(),
-                        userId = it[OrdersTable.userId].toString(),
-                        restaurantId = it[OrdersTable.restaurantId].toString(),
-                        addressId = it[OrdersTable.addressId].toString(),
-                        status = it[OrdersTable.status],
-                        paymentStatus = it[OrdersTable.paymentStatus],
-                        stripePaymentIntentId = it[OrdersTable.stripePaymentIntentId],
-                        totalAmount = it[OrdersTable.totalAmount],
-                        createdAt = it[OrdersTable.createdAt].toString(),
-                        updatedAt = it[OrdersTable.updatedAt].toString()
+                        id = orderId.toString(),
+                        userId = orderRow[OrdersTable.userId].toString(),
+                        restaurantId = orderRow[OrdersTable.restaurantId].toString(),
+                        address = address,
+                        status = orderRow[OrdersTable.status],
+                        paymentStatus = orderRow[OrdersTable.paymentStatus],
+                        stripePaymentIntentId = orderRow[OrdersTable.stripePaymentIntentId],
+                        totalAmount = orderRow[OrdersTable.totalAmount],
+                        items = items,
+                        createdAt = orderRow[OrdersTable.createdAt].toString(),
+                        updatedAt = orderRow[OrdersTable.updatedAt].toString()
                     )
                 }
         }
@@ -118,42 +162,61 @@ object OrderService {
 
     fun getOrderDetails(orderId: UUID): Order {
         return transaction {
-            val order = OrdersTable.select { OrdersTable.id eq orderId }.singleOrNull()
+            val orderRow = OrdersTable.select { OrdersTable.id eq orderId }.singleOrNull()
                 ?: throw IllegalStateException("Order not found")
 
-//            val orderItems = OrderItemsTable.select { OrderItemsTable.orderId eq orderId }
-//                .map {
-//                    OrderItem(
-//                        id = it[OrderItemsTable.id].toString(),
-//                        orderId = it[OrderItemsTable.orderId].toString(),
-//                        menuItemId = it[OrderItemsTable.menuItemId].toString(),
-//                        quantity = it[OrderItemsTable.quantity]
-//                    )
-//                }
+            // Get address
+            val address = AddressesTable.select { 
+                AddressesTable.id eq orderRow[OrdersTable.addressId] 
+            }.map { addressRow ->
+                Address(
+                    id = addressRow[AddressesTable.id].toString(),
+                    userId = addressRow[AddressesTable.userId].toString(),
+                    addressLine1 = addressRow[AddressesTable.addressLine1],
+                    addressLine2 = addressRow[AddressesTable.addressLine2],
+                    city = addressRow[AddressesTable.city],
+                    state = addressRow[AddressesTable.state],
+                    zipCode = addressRow[AddressesTable.zipCode],
+                    country = addressRow[AddressesTable.country],
+                    latitude = addressRow[AddressesTable.latitude],
+                    longitude = addressRow[AddressesTable.longitude]
+                )
+            }.singleOrNull()
+
+            // Get order items
+            val items = OrderItemsTable.select { 
+                OrderItemsTable.orderId eq orderId 
+            }.map { itemRow ->
+                OrderItem(
+                    id = itemRow[OrderItemsTable.id].toString(),
+                    orderId = orderId.toString(),
+                    menuItemId = itemRow[OrderItemsTable.menuItemId].toString(),
+                    quantity = itemRow[OrderItemsTable.quantity]
+                )
+            }
 
             Order(
-                id = order[OrdersTable.id].toString(),
-                userId = order[OrdersTable.userId].toString(),
-                restaurantId = order[OrdersTable.restaurantId].toString(),
-                addressId = order[OrdersTable.addressId].toString(),
-                status = order[OrdersTable.status],
-                paymentStatus = order[OrdersTable.paymentStatus],
-                stripePaymentIntentId = order[OrdersTable.stripePaymentIntentId],
-                totalAmount = order[OrdersTable.totalAmount],
-                createdAt = order[OrdersTable.createdAt].toString(),
-                updatedAt = order[OrdersTable.updatedAt].toString(),
-                items = emptyList()
+                id = orderRow[OrdersTable.id].toString(),
+                userId = orderRow[OrdersTable.userId].toString(),
+                restaurantId = orderRow[OrdersTable.restaurantId].toString(),
+                address = address,
+                status = orderRow[OrdersTable.status],
+                paymentStatus = orderRow[OrdersTable.paymentStatus],
+                stripePaymentIntentId = orderRow[OrdersTable.stripePaymentIntentId],
+                totalAmount = orderRow[OrdersTable.totalAmount],
+                items = items,
+                createdAt = orderRow[OrdersTable.createdAt].toString(),
+                updatedAt = orderRow[OrdersTable.updatedAt].toString()
             )
         }
     }
 
     fun updateOrderStatus(orderId: UUID, status: String): Boolean {
-        return false
-//        return transaction {
-//            OrdersTable.update({ OrdersTable.id eq orderId }) {
-//                it[this.status] = status
-//                it[this.updatedAt] = org.jetbrains.exposed.sql.javatime.CurrentTimestamp
-//            } > 0
-//        }
+        return transaction {
+            OrdersTable.update({ OrdersTable.id eq orderId }) {
+                it[OrdersTable.status] = status
+                it[OrdersTable.updatedAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
+            } > 0
+        }
     }
 }

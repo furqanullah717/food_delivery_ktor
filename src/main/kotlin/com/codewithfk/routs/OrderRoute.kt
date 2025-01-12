@@ -1,5 +1,6 @@
 package com.codewithfk.routs
 
+import com.codewithfk.model.PlaceOrderRequest
 import com.codewithfk.services.OrderService
 import com.codewithfk.utils.respondError
 import io.ktor.http.*
@@ -20,13 +21,11 @@ fun Route.orderRoutes() {
          */
         post {
             val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
-                ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized.")
-            val params = call.receive<Map<String, Any>>()
-            val restaurantId = UUID.fromString(params["restaurantId"] as? String ?: return@post call.respondError(HttpStatusCode.BadRequest, "Restaurant ID is required."))
-            val addressId = UUID.fromString(params["addressId"] as? String ?: return@post call.respondError(HttpStatusCode.BadRequest, "Address ID is required."))
+                ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
 
             try {
-                val orderId = OrderService.placeOrder(UUID.fromString(userId), restaurantId, addressId)
+                val request = call.receive<PlaceOrderRequest>()
+                val orderId = OrderService.placeOrder(UUID.fromString(userId), request)
                 call.respond(mapOf("id" to orderId.toString(), "message" to "Order placed successfully"))
             } catch (e: IllegalStateException) {
                 call.respondError(HttpStatusCode.BadRequest, e.message ?: "Error placing order")

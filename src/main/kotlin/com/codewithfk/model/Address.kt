@@ -14,4 +14,17 @@ data class Address(
     val country: String,
     val latitude: Double? = null,
     val longitude: Double? = null
-) 
+)
+
+@Serializable
+data class ReverseGeocodeRequest(
+    @Serializable
+    val latitude: Double,
+    @Serializable
+    val longitude: Double
+) {
+    init {
+        require(latitude >= -90 && latitude <= 90) { "Latitude must be between -90 and 90" }
+        require(longitude >= -180 && longitude <= 180) { "Longitude must be between -180 and 180" }
+    }
+} 

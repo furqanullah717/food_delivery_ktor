@@ -1,4 +1,3 @@
-
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.ktor)
@@ -53,5 +52,8 @@ dependencies {
 
     // Logging
     implementation("ch.qos.logback:logback-classic:1.4.6")
+
+    // Google Maps
+    implementation("com.google.maps:google-maps-services:2.1.2")
 
 }

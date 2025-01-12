@@ -3,16 +3,21 @@ package com.codewithfk.model
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class PlaceOrderRequest(
+    val addressId: String
+)
+
+@Serializable
 data class Order(
     val id: String,
     val userId: String,
     val restaurantId: String,
-    val addressId: String,
-    val status: String, // Pending, Preparing, Picked Up, Delivered
-    val paymentStatus: String, // Pending, Paid, Failed
-    val stripePaymentIntentId: String?, // Stripe Payment Intent ID
+    val address: Address?,
+    val status: String,
+    val paymentStatus: String,
+    val stripePaymentIntentId: String?,
     val totalAmount: Double,
-    val items: List<OrderItem>? = null, // List of items in the order
+    val items: List<OrderItem>? = null,
     val createdAt: String,
     val updatedAt: String
 )
