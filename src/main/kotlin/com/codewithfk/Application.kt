@@ -74,10 +74,9 @@ fun Application.module() {
         restaurantRoutes()
         menuItemRoutes()
         authenticate {
-
             orderRoutes()
             cartRoutes()
+            addressRoutes()
         }
-
     }
 }
