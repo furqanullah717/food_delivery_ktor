@@ -1,0 +1,11 @@
+services:
+  mysql:
+    image: mysql:9-oraclelinux9
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_DATABASE=food_delivery
+      - MYSQL_ROOT_PASSWORD=root
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+      - ./create-db.sql:/docker-entrypoint-initdb.d/1.sql
