@@ -48,7 +48,7 @@ dependencies {
     implementation("com.auth0:java-jwt:4.4.0")
 
     // Stripe
-    implementation("com.stripe:stripe-java:21.13.0")
+    implementation("com.stripe:stripe-java:22.21.0")
 
     // Logging
     implementation("ch.qos.logback:logback-classic:1.4.6")

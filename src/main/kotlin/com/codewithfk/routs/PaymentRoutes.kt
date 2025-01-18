@@ -1,10 +1,7 @@
 package com.codewithfk.routs
 
-import com.codewithfk.model.CreatePaymentIntentRequest
-import com.codewithfk.model.ConfirmPaymentRequest
-import com.codewithfk.model.PlaceOrderRequest
-import com.codewithfk.services.PaymentService
-import com.codewithfk.services.OrderService
+import com.codewithfk.controllers.PaymentController
+import com.codewithfk.model.*
 import com.codewithfk.utils.respondError
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -18,53 +15,59 @@ import java.util.*
 fun Route.paymentRoutes() {
     route("/payments") {
         authenticate {
-            // Create payment intent
             post("/create-intent") {
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
                     ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
 
                 try {
                     val request = call.receive<CreatePaymentIntentRequest>()
-                    val paymentIntent = PaymentService.createPaymentIntent(
+                    val response = PaymentController.createPaymentSession(
                         UUID.fromString(userId),
-                        UUID.fromString(request.addressId)
+                        request
                     )
-                    call.respond(paymentIntent)
+                    call.respond(response)
                 } catch (e: Exception) {
-                    call.respondError(HttpStatusCode.BadRequest, e.message ?: "Error creating payment intent")
+                    call.respondError(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Error creating payment intent"
+                    )
                 }
             }
 
-            // Confirm payment and place order
             post("/confirm") {
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
                     ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
 
                 try {
                     val request = call.receive<ConfirmPaymentRequest>()
-                    
-                    // Verify payment was successful
-                    val paymentIntent = PaymentService.confirmPayment(
+                    val response = PaymentController.confirmPaymentAndPlaceOrder(
                         UUID.fromString(userId),
-                        request.paymentIntentId
+                        request
                     )
-
-                    // Place the order
-                    val orderId = OrderService.placeOrder(
-                        userId = UUID.fromString(userId),
-                        request = PlaceOrderRequest(
-                            addressId = request.addressId
-                        ),
-                        paymentIntentId = paymentIntent.id
-                    )
-
-                    call.respond(mapOf(
-                        "orderId" to orderId.toString(),
-                        "message" to "Payment confirmed and order placed successfully"
-                    ))
+                    call.respond(response)
                 } catch (e: Exception) {
-                    call.respondError(HttpStatusCode.BadRequest, e.message ?: "Error confirming payment")
+                    call.respondError(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Error confirming payment"
+                    )
                 }
+            }
+        }
+
+        // Webhook endpoint (no authentication required)
+        post("/webhook") {
+            try {
+                val payload = call.receiveText()
+                val signature = call.request.header("Stripe-Signature")
+                    ?: throw IllegalArgumentException("No signature header")
+
+                val success = PaymentController.handleWebhookEvent(payload, signature)
+                call.respond(HttpStatusCode.OK, mapOf("success" to success))
+            } catch (e: Exception) {
+                call.respondError(
+                    HttpStatusCode.BadRequest,
+                    e.message ?: "Webhook processing failed"
+                )
             }
         }
     }
