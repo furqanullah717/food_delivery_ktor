@@ -8,7 +8,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.*
 
 object AddressService {
-    
+
     fun addAddress(address: Address): UUID {
         return transaction {
             AddressesTable.insert {
@@ -83,6 +83,21 @@ object AddressService {
                         longitude = it[AddressesTable.longitude]
                     )
                 }.singleOrNull()
+        }
+    }
+
+    fun createDefaultAddress(userId: UUID) {
+        transaction {
+            AddressesTable.insert {
+                it[AddressesTable.userId] = (userId)
+                it[addressLine1] = "1600 Amphitheatre Parkway"
+                it[city] = "Mountain View"
+                it[state] = "CA"
+                it[zipCode] = "94043"
+                it[country] = "US"
+                it[latitude] = 37.422102
+                it[longitude] = -122.084153
+            } get AddressesTable.id
         }
     }
 } 
