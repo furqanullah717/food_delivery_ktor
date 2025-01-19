@@ -10,13 +10,22 @@ data class CreatePaymentIntentRequest(
 
 @Serializable
 data class PaymentIntentResponse(
-    val clientSecret: String,
+    val paymentIntentClientSecret: String,
     val paymentIntentId: String,
+    val customerId: String,
+    val ephemeralKeySecret: String,
+    val publishableKey: String,
     val amount: Long,
     val currency: String = "usd",
-    val status: String,
-    val requiresAction: Boolean = false,
-    val paymentMethodId: String? = null
+    val status: String
+)
+
+// For webhook handling
+@Serializable
+data class PaymentWebhookResponse(
+    val success: Boolean,
+    val orderId: String? = null,
+    val message: String? = null
 )
 
 @Serializable
@@ -48,4 +57,12 @@ data class PaymentConfirmationResponse(
     val orderId: String? = null,
     val orderStatus: String? = null,
     val message: String? = null
+)
+
+@Serializable
+data class PaymentSheetResponse(
+    val paymentIntent: String,
+    val ephemeralKey: String,
+    val customer: String,
+    val publishableKey: String
 ) 

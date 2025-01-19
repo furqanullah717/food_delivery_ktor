@@ -14,7 +14,45 @@ import java.util.*
 
 fun Route.paymentRoutes() {
     route("/payments") {
+        // Webhook endpoint (no authentication required)
+        post("/webhook") {
+            try {
+                val payload = call.receiveText()
+                val signature = call.request.header("Stripe-Signature")
+                    ?: throw IllegalArgumentException("No signature header")
+
+                val success = PaymentController.handleWebhookEvent(payload, signature)
+                call.respond(HttpStatusCode.OK, mapOf("success" to success))
+            } catch (e: Exception) {
+                call.respondError(
+                    HttpStatusCode.BadRequest,
+                    e.message ?: "Webhook processing failed"
+                )
+            }
+        }
+
+        // Protected routes
         authenticate {
+            // PaymentSheet flow
+            post("/create-sheet") {
+                val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+                    ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+
+                try {
+                    val request = call.receive<CreatePaymentIntentRequest>()
+                    val response = PaymentController.createPaymentSheet(
+                        UUID.fromString(userId),
+                        request
+                    )
+                    call.respond(response)
+                } catch (e: Exception) {
+                    call.respondError(
+                        HttpStatusCode.BadRequest,
+                        e.message ?: "Error creating payment sheet"
+                    )
+                }
+            }
+
             post("/create-intent") {
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
                     ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
@@ -34,15 +72,17 @@ fun Route.paymentRoutes() {
                 }
             }
 
-            post("/confirm") {
+            post("/confirm/{paymentIntentId}") {
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
                     ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+                
+                val paymentIntentId = call.parameters["paymentIntentId"] 
+                    ?: return@post call.respondError(HttpStatusCode.BadRequest, "Payment Intent ID required")
 
                 try {
-                    val request = call.receive<ConfirmPaymentRequest>()
-                    val response = PaymentController.confirmPaymentAndPlaceOrder(
+                    val response = PaymentController.confirmAndPlaceOrder(
                         UUID.fromString(userId),
-                        request
+                        paymentIntentId
                     )
                     call.respond(response)
                 } catch (e: Exception) {
@@ -51,23 +91,6 @@ fun Route.paymentRoutes() {
                         e.message ?: "Error confirming payment"
                     )
                 }
-            }
-        }
-
-        // Webhook endpoint (no authentication required)
-        post("/webhook") {
-            try {
-                val payload = call.receiveText()
-                val signature = call.request.header("Stripe-Signature")
-                    ?: throw IllegalArgumentException("No signature header")
-
-                val success = PaymentController.handleWebhookEvent(payload, signature)
-                call.respond(HttpStatusCode.OK, mapOf("success" to success))
-            } catch (e: Exception) {
-                call.respondError(
-                    HttpStatusCode.BadRequest,
-                    e.message ?: "Webhook processing failed"
-                )
             }
         }
     }

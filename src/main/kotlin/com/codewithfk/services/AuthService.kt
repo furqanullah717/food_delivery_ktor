@@ -37,6 +37,13 @@ object AuthService {
         }
     }
 
+    fun getUserEmailFromID(userId: UUID): String? {
+        return transaction {
+            val user = UsersTable.select { UsersTable.id eq userId }.singleOrNull()
+            user?.get(UsersTable.email)
+        }
+    }
+
     fun login(email: String, passwordHash: String): String? {
         return transaction {
             val user = UsersTable.select {

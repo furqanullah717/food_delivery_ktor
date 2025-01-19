@@ -9,76 +9,64 @@ import com.stripe.model.Event
 import com.stripe.param.PaymentIntentCreateParams
 import com.stripe.param.PaymentIntentConfirmParams
 import java.util.*
+import com.stripe.model.EphemeralKey
+import com.stripe.model.Customer
+import com.codewithfk.model.PaymentSheetResponse
+import com.stripe.net.RequestOptions
 
 object PaymentService {
     init {
         Stripe.apiKey = StripeConfig.secretKey
     }
 
-    fun createPaymentIntent(userId: UUID, addressId: UUID, paymentMethodId: String? = null): PaymentIntentResponse {
+    fun createPaymentIntent(userId: UUID, addressId: UUID): PaymentIntentResponse {
         try {
             // Get cart total
             val checkoutDetails = OrderService.getCheckoutDetails(userId)
             val amountInCents = (checkoutDetails.totalAmount * 100).toLong()
 
+            // Get or create customer
+            val customer = getOrCreateCustomer(userId)
+
+            // Create ephemeral key
+            val requestOptions = RequestOptions.builder()
+                .build()
+
+            val ephemeralKey = EphemeralKey.create(
+                mapOf(
+                    "customer" to customer,
+                    "stripe-version" to "2020-08-27"  // API version for Stripe Android SDK 20.35.0
+                ),
+                requestOptions
+            )
+
+            // Create payment intent
             val paramsBuilder = PaymentIntentCreateParams.builder()
                 .setAmount(amountInCents)
                 .setCurrency("usd")
+                .setCustomer(customer)
                 .putMetadata("userId", userId.toString())
                 .putMetadata("addressId", addressId.toString())
-                .setConfirmationMethod(PaymentIntentCreateParams.ConfirmationMethod.MANUAL)
-
-            // If payment method is provided, attach it
-            if (paymentMethodId != null) {
-                paramsBuilder
-                    .setPaymentMethod(paymentMethodId)
-                    .setConfirm(true)
-                    .setOffSession(false)
-            }
+                .setAutomaticPaymentMethods(
+                    PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
+                        .setEnabled(true)
+                        .build()
+                )
 
             val paymentIntent = PaymentIntent.create(paramsBuilder.build())
 
             return PaymentIntentResponse(
-                clientSecret = paymentIntent.clientSecret,
+                paymentIntentClientSecret = paymentIntent.clientSecret,
                 paymentIntentId = paymentIntent.id,
+                customerId = customer,
+                ephemeralKeySecret = ephemeralKey.secret,
+                publishableKey = StripeConfig.publishableKey,
                 amount = amountInCents,
                 currency = "usd",
-                status = paymentIntent.status,
-                requiresAction = paymentIntent.status == "requires_action",
-                paymentMethodId = paymentIntent.paymentMethod
+                status = paymentIntent.status
             )
         } catch (e: Exception) {
             throw IllegalStateException("Error creating payment intent: ${e.message}")
-        }
-    }
-
-    fun confirmPayment(userId: UUID, paymentIntentId: String, paymentMethodId: String? = null): PaymentIntent {
-        try {
-            val paymentIntent = PaymentIntent.retrieve(paymentIntentId)
-            
-            // Verify ownership
-            if (paymentIntent.metadata["userId"] != userId.toString()) {
-                throw IllegalStateException("Payment intent does not belong to this user")
-            }
-
-            // If new payment method provided, confirm with it
-            if (paymentMethodId != null) {
-                val params = PaymentIntentConfirmParams.builder()
-                    .setPaymentMethod(paymentMethodId)
-                    .setReturnUrl("https://your-domain.com/payment/complete") // Add return URL
-                    .build()
-                return paymentIntent.confirm(params)
-            }
-
-            return when (paymentIntent.status) {
-                "requires_payment_method" -> throw IllegalStateException("Payment method required")
-                "requires_action" -> throw IllegalStateException("Additional authentication required")
-                "requires_confirmation" -> paymentIntent.confirm()
-                "succeeded" -> paymentIntent
-                else -> throw IllegalStateException("Invalid payment status: ${paymentIntent.status}")
-            }
-        } catch (e: Exception) {
-            throw IllegalStateException("Error confirming payment: ${e.message}")
         }
     }
 
@@ -122,14 +110,88 @@ object PaymentService {
     }
 
     private fun handleFailedPayment(paymentIntent: PaymentIntent) {
-        // Log the failure
         println("Payment failed for intent: ${paymentIntent.id}")
         println("Failure message: ${paymentIntent.lastPaymentError?.message}")
     }
 
-    // Optional: Implement customer management if needed
+    fun createPaymentSheet(userId: UUID, addressId: UUID): PaymentSheetResponse {
+        try {
+            // Get cart total
+            val checkoutDetails = OrderService.getCheckoutDetails(userId)
+            val amountInCents = (checkoutDetails.totalAmount * 100).toLong()
+
+            // Get or create customer
+            val customer = getOrCreateCustomer(userId)
+
+            // Create ephemeral key with proper request options
+            val requestOptions = RequestOptions.builder()
+                .build()
+
+            val ephemeralKey = EphemeralKey.create(
+                mapOf(
+                    "customer" to customer,
+                    "stripe-version" to "2020-08-27"  // API version for Stripe Android SDK 20.35.0
+                ),
+                requestOptions
+            )
+
+            // Create payment intent
+            val paymentIntent = PaymentIntent.create(
+                PaymentIntentCreateParams.builder()
+                    .setAmount(amountInCents)
+                    .setCurrency("usd")
+                    .setCustomer(customer)
+                    .putMetadata("userId", userId.toString())
+                    .putMetadata("addressId", addressId.toString())
+                    .setAutomaticPaymentMethods(
+                        PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
+                            .setEnabled(true)
+                            .build()
+                    )
+                    .build()
+            )
+
+            return PaymentSheetResponse(
+                paymentIntent = paymentIntent.clientSecret,
+                ephemeralKey = ephemeralKey.secret,
+                customer = customer,
+                publishableKey = StripeConfig.publishableKey
+            )
+        } catch (e: Exception) {
+            throw IllegalStateException("Error creating payment sheet: ${e.message}")
+        }
+    }
+
     private fun getOrCreateCustomer(userId: UUID): String {
-        // TODO: Implement customer management
-        return "cus_xxx"
+        val user = AuthService.getUserEmailFromID(userId)
+            ?: throw IllegalStateException("User not found")
+
+        val existingCustomers = Customer.list(
+            mapOf("email" to user)
+        )
+
+        if (existingCustomers.data.isNotEmpty()) {
+            return existingCustomers.data[0].id
+        }
+
+        val customer = Customer.create(
+            mapOf(
+                "metadata" to mapOf("userId" to userId.toString()),
+                "email" to user,
+            )
+        )
+
+        return customer.id
+    }
+
+    fun verifyAndGetPaymentIntent(userId: UUID, paymentIntentId: String): PaymentIntent {
+        val paymentIntent = PaymentIntent.retrieve(paymentIntentId)
+        
+        // Verify ownership
+        if (paymentIntent.metadata["userId"] != userId.toString()) {
+            throw IllegalStateException("Payment intent does not belong to this user")
+        }
+
+        return paymentIntent
     }
 } 

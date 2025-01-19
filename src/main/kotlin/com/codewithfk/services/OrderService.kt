@@ -219,4 +219,25 @@ object OrderService {
             } > 0
         }
     }
+
+    fun getOrderByPaymentIntentId(paymentIntentId: String): Order? {
+        return transaction {
+            OrdersTable.select { OrdersTable.stripePaymentIntentId eq paymentIntentId }
+                .map { row ->
+                    Order(
+                        id = row[OrdersTable.id].toString(),
+                        userId = row[OrdersTable.userId].toString(),
+                        restaurantId = row[OrdersTable.restaurantId].toString(),
+                        status = row[OrdersTable.status],
+                        paymentStatus = row[OrdersTable.paymentStatus],
+                        stripePaymentIntentId = row[OrdersTable.stripePaymentIntentId],
+                        totalAmount = row[OrdersTable.totalAmount],
+                        createdAt = row[OrdersTable.createdAt].toString(),
+                        updatedAt = row[OrdersTable.updatedAt].toString(),
+                        address = null  // You can load address if needed
+                    )
+                }
+                .singleOrNull()
+        }
+    }
 }
