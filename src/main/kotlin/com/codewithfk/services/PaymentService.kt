@@ -82,14 +82,17 @@ object PaymentService {
                 "payment_intent.succeeded" -> {
                     val paymentIntent = event.dataObjectDeserializer.`object`.get() as PaymentIntent
                     handleSuccessfulPayment(paymentIntent)
+                    println("Webhook: Payment succeeded for intent ${paymentIntent.id}")
                 }
                 "payment_intent.payment_failed" -> {
                     val paymentIntent = event.dataObjectDeserializer.`object`.get() as PaymentIntent
                     handleFailedPayment(paymentIntent)
+                    println("Webhook: Payment failed for intent ${paymentIntent.id}")
                 }
             }
             return true
         } catch (e: Exception) {
+            println("Webhook error: ${e.message}")
             throw IllegalStateException("Webhook handling failed: ${e.message}")
         }
     }
@@ -97,14 +100,21 @@ object PaymentService {
     private fun handleSuccessfulPayment(paymentIntent: PaymentIntent) {
         try {
             val userId = UUID.fromString(paymentIntent.metadata["userId"])
+                ?: throw IllegalStateException("User ID not found in payment intent metadata")
             val addressId = UUID.fromString(paymentIntent.metadata["addressId"])
+                ?: throw IllegalStateException("Address ID not found in payment intent metadata")
             
+            println("Creating order for userId: $userId, addressId: $addressId, paymentIntentId: ${paymentIntent.id}")
+
             OrderService.placeOrder(
                 userId = userId,
                 request = PlaceOrderRequest(addressId = addressId.toString()),
                 paymentIntentId = paymentIntent.id
             )
+            
+            println("Order created successfully")
         } catch (e: Exception) {
+            println("Error handling successful payment: ${e.message}")
             throw IllegalStateException("Error handling successful payment: ${e.message}")
         }
     }

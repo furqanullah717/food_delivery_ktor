@@ -1,11 +1,7 @@
 package com.codewithfk.services
 
 import com.codewithfk.database.*
-import com.codewithfk.model.CheckoutModel
-import com.codewithfk.model.Order
-import com.codewithfk.model.PlaceOrderRequest
-import com.codewithfk.model.OrderItem
-import com.codewithfk.model.Address
+import com.codewithfk.model.*
 import com.codewithfk.utils.StripeUtils
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -53,7 +49,7 @@ object OrderService {
             // Verify address belongs to user
             val address = AddressService.getAddressById(UUID.fromString(request.addressId))
                 ?: throw IllegalStateException("Address not found")
-            
+
             if (address.userId != userId.toString()) {
                 throw IllegalStateException("Address does not belong to user")
             }
@@ -109,13 +105,15 @@ object OrderService {
 
     fun getOrdersByUser(userId: UUID): List<Order> {
         return transaction {
-            OrdersTable.select { OrdersTable.userId eq userId }
+            (OrdersTable
+                .join(RestaurantsTable, JoinType.LEFT, OrdersTable.restaurantId, RestaurantsTable.id)
+                .select { OrdersTable.userId eq userId })
                 .map { orderRow ->
                     val orderId = orderRow[OrdersTable.id]
-                    
+
                     // Get address
                     val address = AddressesTable.select {
-                        AddressesTable.id eq orderRow[OrdersTable.addressId] 
+                        AddressesTable.id eq orderRow[OrdersTable.addressId]
                     }.map { addressRow ->
                         Address(
                             id = addressRow[AddressesTable.id].toString(),
@@ -132,8 +130,8 @@ object OrderService {
                     }.singleOrNull()
 
                     // Get order items
-                    val items = OrderItemsTable.select { 
-                        OrderItemsTable.orderId eq orderId 
+                    val items = OrderItemsTable.select {
+                        OrderItemsTable.orderId eq orderId
                     }.map { itemRow ->
                         OrderItem(
                             id = itemRow[OrderItemsTable.id].toString(),
@@ -153,6 +151,17 @@ object OrderService {
                         stripePaymentIntentId = orderRow[OrdersTable.stripePaymentIntentId],
                         totalAmount = orderRow[OrdersTable.totalAmount],
                         items = items,
+                        restaurant = Restaurant(
+                            id = orderRow[RestaurantsTable.id].toString(),
+                            ownerId = orderRow[RestaurantsTable.ownerId].toString(),
+                            name = orderRow[RestaurantsTable.name],
+                            address = orderRow[RestaurantsTable.address],
+                            categoryId = orderRow[RestaurantsTable.categoryId].toString(),
+                            latitude = orderRow[RestaurantsTable.latitude],
+                            longitude = orderRow[RestaurantsTable.longitude],
+                            imageUrl = orderRow[RestaurantsTable.imageUrl] ?: "",
+                            createdAt = orderRow[RestaurantsTable.createdAt].toString()
+                        ),
                         createdAt = orderRow[OrdersTable.createdAt].toString(),
                         updatedAt = orderRow[OrdersTable.updatedAt].toString()
                     )
@@ -162,12 +171,14 @@ object OrderService {
 
     fun getOrderDetails(orderId: UUID): Order {
         return transaction {
-            val orderRow = OrdersTable.select { OrdersTable.id eq orderId }.singleOrNull()
-                ?: throw IllegalStateException("Order not found")
+            val orderRow = (OrdersTable
+                .join(RestaurantsTable, JoinType.LEFT, OrdersTable.restaurantId, RestaurantsTable.id)
+                .select { OrdersTable.id eq orderId }
+                .singleOrNull() ?: throw IllegalStateException("Order not found"))
 
             // Get address
-            val address = AddressesTable.select { 
-                AddressesTable.id eq orderRow[OrdersTable.addressId] 
+            val address = AddressesTable.select {
+                AddressesTable.id eq orderRow[OrdersTable.addressId]
             }.map { addressRow ->
                 Address(
                     id = addressRow[AddressesTable.id].toString(),
@@ -184,8 +195,8 @@ object OrderService {
             }.singleOrNull()
 
             // Get order items
-            val items = OrderItemsTable.select { 
-                OrderItemsTable.orderId eq orderId 
+            val items = OrderItemsTable.select {
+                OrderItemsTable.orderId eq orderId
             }.map { itemRow ->
                 OrderItem(
                     id = itemRow[OrderItemsTable.id].toString(),
@@ -205,6 +216,17 @@ object OrderService {
                 stripePaymentIntentId = orderRow[OrdersTable.stripePaymentIntentId],
                 totalAmount = orderRow[OrdersTable.totalAmount],
                 items = items,
+                restaurant = Restaurant(
+                    id = orderRow[RestaurantsTable.id].toString(),
+                    ownerId = orderRow[RestaurantsTable.ownerId].toString(),
+                    name = orderRow[RestaurantsTable.name],
+                    address = orderRow[RestaurantsTable.address],
+                    categoryId = orderRow[RestaurantsTable.categoryId].toString(),
+                    latitude = orderRow[RestaurantsTable.latitude],
+                    longitude = orderRow[RestaurantsTable.longitude],
+                    imageUrl = orderRow[RestaurantsTable.imageUrl] ?: "",
+                    createdAt = orderRow[RestaurantsTable.createdAt].toString()
+                ),
                 createdAt = orderRow[OrdersTable.createdAt].toString(),
                 updatedAt = orderRow[OrdersTable.updatedAt].toString()
             )
@@ -222,7 +244,9 @@ object OrderService {
 
     fun getOrderByPaymentIntentId(paymentIntentId: String): Order? {
         return transaction {
-            OrdersTable.select { OrdersTable.stripePaymentIntentId eq paymentIntentId }
+            (OrdersTable
+                .join(RestaurantsTable, JoinType.LEFT, OrdersTable.restaurantId, RestaurantsTable.id)
+                .select { OrdersTable.stripePaymentIntentId eq paymentIntentId }
                 .map { row ->
                     Order(
                         id = row[OrdersTable.id].toString(),
@@ -234,10 +258,21 @@ object OrderService {
                         totalAmount = row[OrdersTable.totalAmount],
                         createdAt = row[OrdersTable.createdAt].toString(),
                         updatedAt = row[OrdersTable.updatedAt].toString(),
-                        address = null  // You can load address if needed
+                        address = null,  // You can load address if needed
+                        restaurant = Restaurant(
+                            id = row[RestaurantsTable.id].toString(),
+                            ownerId = row[RestaurantsTable.ownerId].toString(),
+                            name = row[RestaurantsTable.name],
+                            address = row[RestaurantsTable.address],
+                            categoryId = row[RestaurantsTable.categoryId].toString(),
+                            latitude = row[RestaurantsTable.latitude],
+                            longitude = row[RestaurantsTable.longitude],
+                            imageUrl = row[RestaurantsTable.imageUrl] ?: "",
+                            createdAt = row[RestaurantsTable.createdAt].toString()
+                        )
                     )
                 }
-                .singleOrNull()
+                .singleOrNull())
         }
     }
 }

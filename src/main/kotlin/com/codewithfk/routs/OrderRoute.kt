@@ -39,14 +39,17 @@ fun Route.orderRoutes() {
             val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
                 ?: return@get call.respondError(HttpStatusCode.Unauthorized, "Unauthorized.")
             val orders = OrderService.getOrdersByUser(UUID.fromString(userId))
-            call.respond(orders)
+            call.respond(mapOf("orders" to orders))
         }
 
         /**
          * Fetch details of a specific order
          */
         get("/{id}") {
-            val orderId = call.parameters["id"] ?: return@get call.respondError(HttpStatusCode.BadRequest, "Order ID is required.")
+            val orderId = call.parameters["id"] ?: return@get call.respondError(
+                HttpStatusCode.BadRequest,
+                "Order ID is required."
+            )
             try {
                 val order = OrderService.getOrderDetails(UUID.fromString(orderId))
                 call.respond(order)
@@ -59,9 +62,13 @@ fun Route.orderRoutes() {
          * Update order status
          */
         patch("/{id}/status") {
-            val orderId = call.parameters["id"] ?: return@patch call.respondError(HttpStatusCode.BadRequest, "Order ID is required.")
+            val orderId = call.parameters["id"] ?: return@patch call.respondError(
+                HttpStatusCode.BadRequest,
+                "Order ID is required."
+            )
             val params = call.receive<Map<String, String>>()
-            val status = params["status"] ?: return@patch call.respondError(HttpStatusCode.BadRequest, "Status is required.")
+            val status =
+                params["status"] ?: return@patch call.respondError(HttpStatusCode.BadRequest, "Status is required.")
 
             val success = OrderService.updateOrderStatus(UUID.fromString(orderId), status)
             if (success) call.respond(mapOf("message" to "Order status updated successfully"))

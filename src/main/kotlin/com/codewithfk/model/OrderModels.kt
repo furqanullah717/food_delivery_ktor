@@ -18,6 +18,7 @@ data class Order(
     val stripePaymentIntentId: String?,
     val totalAmount: Double,
     val items: List<OrderItem>? = null,
+    val restaurant: Restaurant? = null,
     val createdAt: String,
     val updatedAt: String
 )

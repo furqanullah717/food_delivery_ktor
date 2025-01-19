@@ -2,18 +2,23 @@ package com.codewithfk
 
 import com.codewithfk.configs.FacebookAuthConfig
 import com.codewithfk.configs.GoogleAuthConfig
+import com.codewithfk.controllers.PaymentController
 import com.codewithfk.database.DatabaseFactory
 import com.codewithfk.database.migrateDatabase
 import com.codewithfk.database.seedDatabase
 import com.codewithfk.routs.*
+import com.codewithfk.utils.respondError
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.callloging.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 fun main(args: Array<String>) {
@@ -75,6 +80,21 @@ fun Application.module() {
         categoryRoutes()
         restaurantRoutes()
         menuItemRoutes()
+        post("/payments/webhook") {
+            try {
+                val payload = call.receiveText()
+                val signature = call.request.header("Stripe-Signature")
+                    ?: throw IllegalArgumentException("No signature header")
+
+                val success = PaymentController.handleWebhookEvent(payload, signature)
+                call.respond(HttpStatusCode.OK, mapOf("success" to success))
+            } catch (e: Exception) {
+                call.respondError(
+                    HttpStatusCode.BadRequest,
+                    e.message ?: "Webhook processing failed"
+                )
+            }
+        }
         authenticate {
             orderRoutes()
             cartRoutes()
