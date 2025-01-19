@@ -33,6 +33,10 @@ object AuthService {
                 it[this.role] = role
                 it[this.authProvider] = "email"
             }
+            val address = AddressService.getAddressesByUser(userId)
+            if (address.isEmpty()) {
+                AddressService.createDefaultAddress(userId)
+            }
             JwtConfig.generateToken(userId.toString())
         }
     }
@@ -51,8 +55,12 @@ object AuthService {
             }.singleOrNull()
 
             user?.let {
-                val userId = it[UsersTable.id].toString()
-                JwtConfig.generateToken(userId)
+                val userId = it[UsersTable.id]
+                val address = AddressService.getAddressesByUser(userId)
+                if (address.isEmpty()) {
+                    AddressService.createDefaultAddress(userId)
+                }
+                JwtConfig.generateToken(userId.toString())
             }
         }
     }
