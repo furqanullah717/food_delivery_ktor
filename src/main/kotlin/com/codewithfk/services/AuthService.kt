@@ -133,10 +133,18 @@ object AuthService {
                     it[this.authProvider] = provider
                     it[this.role] = userType
                 }
+                val address = AddressService.getAddressesByUser(userId)
+                if (address.isEmpty()) {
+                    AddressService.createDefaultAddress(userId)
+                }
                 JwtConfig.generateToken(userId.toString())
             } else {
                 // Generate token for existing user
                 val userId = user[UsersTable.id]
+                val address = AddressService.getAddressesByUser(userId)
+                if (address.isEmpty()) {
+                    AddressService.createDefaultAddress(userId)
+                }
                 JwtConfig.generateToken(userId.toString())
             }
         }
