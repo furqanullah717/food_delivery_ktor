@@ -27,8 +27,7 @@ build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
-
-### STS ###
+foodhub-88731-firebase-adminsdk-fbsvc-b9e9b89078.json
 .apt_generated
 .classpath
 .factorypath
