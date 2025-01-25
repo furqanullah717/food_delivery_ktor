@@ -14,6 +14,7 @@ object UsersTable : Table("users") {
     val createdAt = datetime("created_at").defaultExpression(
         org.jetbrains.exposed.sql.javatime.CurrentTimestamp()
     )
+    val fcmToken = varchar("fcm_token", 255).nullable()
 
     override val primaryKey: PrimaryKey
         get() = PrimaryKey(id)

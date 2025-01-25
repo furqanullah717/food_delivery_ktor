@@ -7,6 +7,7 @@ import com.codewithfk.database.DatabaseFactory
 import com.codewithfk.database.migrateDatabase
 import com.codewithfk.database.seedDatabase
 import com.codewithfk.routs.*
+import com.codewithfk.services.FirebaseService
 import com.codewithfk.utils.respondError
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -20,6 +21,10 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import com.google.auth.oauth2.GoogleCredentials
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
+import java.io.FileInputStream
 
 fun main(args: Array<String>) {
     io.ktor.server.netty.EngineMain.main(args)
@@ -31,6 +36,7 @@ fun Application.module() {
     }
     install(CallLogging)
     configureRouting()
+    FirebaseService // Initialize Firebase
     install(Authentication) {
         jwt {
             realm = "ktor.io"
@@ -100,6 +106,7 @@ fun Application.module() {
             cartRoutes()
             addressRoutes()
             paymentRoutes()
+            notificationRoutes()
         }
     }
 }

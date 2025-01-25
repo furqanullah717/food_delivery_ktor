@@ -40,7 +40,34 @@ object DatabaseFactory {
 }
 
 fun Application.migrateDatabase() {
-    // This function can be used for future database migrations
+    transaction {
+        try {
+            // First check if column exists
+            val columnExists = exec("""
+                SELECT COUNT(*) 
+                FROM information_schema.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'users' 
+                AND COLUMN_NAME = 'fcm_token'
+            """) { it.next(); it.getInt(1) } ?: 0 > 0
+
+            // Add column if it doesn't exist
+            if (!columnExists) {
+                exec("""
+                    ALTER TABLE users 
+                    ADD COLUMN fcm_token VARCHAR(255) NULL
+                """)
+                println("Added fcm_token column to users table")
+            } else {
+                println("fcm_token column already exists")
+            }
+            
+            println("Migration completed successfully")
+        } catch (e: Exception) {
+            println("Migration failed: ${e.message}")
+            throw e
+        }
+    }
 }
 
 fun Application.seedDatabase() {

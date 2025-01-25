@@ -56,4 +56,7 @@ dependencies {
     // Google Maps
     implementation("com.google.maps:google-maps-services:2.1.2")
 
+    // Firebase Admin SDK
+    implementation("com.google.firebase:firebase-admin:9.2.0")
+
 }

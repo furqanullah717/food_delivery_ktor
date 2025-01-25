@@ -150,4 +150,12 @@ object AuthService {
         }
     }
 
+    fun updateFcmToken(userId: UUID, token: String) {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[fcmToken] = token
+            }
+        }
+    }
+
 }

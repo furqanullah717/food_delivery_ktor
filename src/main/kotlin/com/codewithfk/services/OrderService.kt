@@ -235,10 +235,29 @@ object OrderService {
 
     fun updateOrderStatus(orderId: UUID, status: String): Boolean {
         return transaction {
-            OrdersTable.update({ OrdersTable.id eq orderId }) {
+            val updated = OrdersTable.update({ OrdersTable.id eq orderId }) {
                 it[OrdersTable.status] = status
                 it[OrdersTable.updatedAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
             } > 0
+
+            if (updated) {
+                // Get user ID for the order
+                val userId = OrdersTable
+                    .select { OrdersTable.id eq orderId }
+                    .map { it[OrdersTable.userId] }
+                    .single()
+
+                // Create notification
+                NotificationService.createNotification(
+                    userId = userId,
+                    title = "Order Status Updated",
+                    message = "Your order #${orderId.toString().take(8)} status has been updated to $status",
+                    type = "order",
+                    orderId = orderId
+                )
+            }
+
+            updated
         }
     }
 
