@@ -29,7 +29,8 @@ object DatabaseFactory {
                     AddressesTable,
                     OrdersTable,
                     OrderItemsTable,
-                    CartTable
+                    CartTable,
+                    NotificationsTable
                 )
             }
         } catch (e: Exception) {
