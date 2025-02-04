@@ -51,6 +51,8 @@ object MenuItemsTable : Table("menu_items") {
     val price = double("price")
     val imageUrl = varchar("image_url", 500).nullable()
     val arModelUrl = varchar("ar_model_url", 500).nullable()
+    val category = varchar("category", 100).nullable()
+    val isAvailable = bool("is_available").default(true)
     val createdAt = datetime("created_at").defaultExpression(org.jetbrains.exposed.sql.javatime.CurrentTimestamp())
     override val primaryKey: PrimaryKey
         get() = PrimaryKey(id)

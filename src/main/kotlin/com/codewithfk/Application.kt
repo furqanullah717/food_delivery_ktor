@@ -107,6 +107,7 @@ fun Application.module() {
             addressRoutes()
             paymentRoutes()
             notificationRoutes()
+            restaurantOwnerRoutes()
         }
     }
 }
