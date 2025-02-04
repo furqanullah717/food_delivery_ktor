@@ -85,93 +85,6 @@ object RestaurantOwnerService {
         }
     }
 
-    fun updateOrderStatus(ownerId: UUID, orderId: UUID, status: String) {
-        transaction {
-            // Verify restaurant ownership
-            val order = OrdersTable
-                .join(RestaurantsTable, JoinType.INNER, OrdersTable.restaurantId, RestaurantsTable.id)
-                .select { 
-                    (OrdersTable.id eq orderId) and (RestaurantsTable.ownerId eq ownerId)
-                }
-                .firstOrNull() ?: throw IllegalStateException("Order not found or unauthorized")
-
-            // Update status
-            OrdersTable.update({ OrdersTable.id eq orderId }) {
-                it[OrdersTable.status] = status
-                it[OrdersTable.updatedAt] = LocalDateTime.now()
-            }
-
-            // Create notification for customer
-            NotificationService.createNotification(
-                userId = order[OrdersTable.userId],
-                title = "Order Status Updated",
-                message = "Your order status has been updated to $status",
-                type = "ORDER_STATUS",
-                orderId = orderId
-            )
-        }
-    }
-
-    fun addMenuItem(ownerId: UUID, request: CreateMenuItemRequest): UUID {
-        return transaction {
-            // Get restaurant ID
-            val restaurantId = RestaurantsTable
-                .select { RestaurantsTable.ownerId eq ownerId }
-                .map { it[RestaurantsTable.id] }
-                .firstOrNull() ?: throw IllegalStateException("Restaurant not found")
-
-            MenuItemsTable.insert {
-                it[id] = UUID.randomUUID()
-                it[this.restaurantId] = restaurantId
-                it[name] = request.name
-                it[description] = request.description
-                it[price] = request.price
-                it[imageUrl] = request.imageUrl
-                it[MenuItemsTable.category] = request.category
-                it[MenuItemsTable.isAvailable] = request.isAvailable
-            } get MenuItemsTable.id
-        }
-    }
-
-    fun updateMenuItem(ownerId: UUID, itemId: UUID, request: UpdateMenuItemRequest) {
-        transaction {
-            // Verify ownership
-            val menuItem = MenuItemsTable
-                .join(RestaurantsTable, JoinType.INNER, MenuItemsTable.restaurantId, RestaurantsTable.id)
-                .select { 
-                    (MenuItemsTable.id eq itemId) and (RestaurantsTable.ownerId eq ownerId)
-                }
-                .firstOrNull() ?: throw IllegalStateException("Menu item not found or unauthorized")
-
-            MenuItemsTable.update({ MenuItemsTable.id eq itemId }) {
-                request.name?.let { name -> it[MenuItemsTable.name] = name }
-                request.description?.let { desc -> it[description] = desc }
-                request.price?.let { price -> it[MenuItemsTable.price] = price }
-                request.imageUrl?.let { url -> it[imageUrl] = url }
-                request.category?.let { cat -> it[MenuItemsTable.category] = cat }
-                request.isAvailable?.let { available -> it[MenuItemsTable.isAvailable] = available }
-            }
-        }
-    }
-
-    fun deleteMenuItem(ownerId: UUID, itemId: UUID) {
-        transaction {
-            // Verify ownership
-            val exists = MenuItemsTable
-                .join(RestaurantsTable, JoinType.INNER, MenuItemsTable.restaurantId, RestaurantsTable.id)
-                .select { 
-                    (MenuItemsTable.id eq itemId) and (RestaurantsTable.ownerId eq ownerId)
-                }
-                .count() > 0
-
-            if (!exists) {
-                throw IllegalStateException("Menu item not found or unauthorized")
-            }
-
-            MenuItemsTable.deleteWhere { MenuItemsTable.id eq itemId }
-        }
-    }
-
     fun getRestaurantStatistics(ownerId: UUID): RestaurantStatistics {
         return transaction {
             // Get restaurant ID
@@ -259,20 +172,6 @@ object RestaurantOwnerService {
         }
     }
 
-    // Add more restaurant management functions
-    fun updateRestaurantProfile(ownerId: UUID, request: UpdateRestaurantRequest): Boolean {
-        return transaction {
-            RestaurantsTable.update({ RestaurantsTable.ownerId eq ownerId }) {
-                request.name?.let { name -> it[RestaurantsTable.name] = name }
-                request.address?.let { addr -> it[address] = addr }
-                request.imageUrl?.let { url -> it[imageUrl] = url }
-                request.categoryId?.let { catId -> it[categoryId] = UUID.fromString(catId) }
-                request.latitude?.let { lat -> it[latitude] = lat }
-                request.longitude?.let { lon -> it[longitude] = lon }
-            } > 0
-        }
-    }
-
     fun getRestaurantDetails(ownerId: UUID): Restaurant? {
         return transaction {
             RestaurantsTable
@@ -291,6 +190,19 @@ object RestaurantOwnerService {
                     )
                 }
                 .firstOrNull()
+        }
+    }
+
+    fun updateRestaurantProfile(ownerId: UUID, request: UpdateRestaurantRequest): Boolean {
+        return transaction {
+            RestaurantsTable.update({ RestaurantsTable.ownerId eq ownerId }) {
+                request.name?.let { name -> it[RestaurantsTable.name] = name }
+                request.address?.let { addr -> it[address] = addr }
+                request.imageUrl?.let { url -> it[imageUrl] = url }
+                request.categoryId?.let { catId -> it[categoryId] = UUID.fromString(catId) }
+                request.latitude?.let { lat -> it[latitude] = lat }
+                request.longitude?.let { lon -> it[longitude] = lon }
+            } > 0
         }
     }
 } 

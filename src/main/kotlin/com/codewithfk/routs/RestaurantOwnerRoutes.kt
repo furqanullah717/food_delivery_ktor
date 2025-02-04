@@ -1,6 +1,7 @@
 package com.codewithfk.routs
 
 import com.codewithfk.model.*
+import com.codewithfk.services.OrderService
 import com.codewithfk.services.RestaurantOwnerService
 import com.codewithfk.utils.respondError
 import io.ktor.http.*
@@ -39,8 +40,7 @@ fun Route.restaurantOwnerRoutes() {
                 )
                 
                 val request = call.receive<UpdateOrderStatusRequest>()
-                RestaurantOwnerService.updateOrderStatus(
-                    ownerId = UUID.fromString(ownerId),
+                OrderService.updateOrderStatus(
                     orderId = UUID.fromString(orderId),
                     status = request.status
                 )
