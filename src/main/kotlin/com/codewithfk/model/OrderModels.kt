@@ -12,6 +12,7 @@ data class Order(
     val id: String,
     val userId: String,
     val restaurantId: String,
+    val riderId: String?,
     val address: Address?,
     val status: String,
     val paymentStatus: String,

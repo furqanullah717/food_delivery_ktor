@@ -21,10 +21,9 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import com.google.auth.oauth2.GoogleCredentials
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
-import java.io.FileInputStream
+import io.ktor.server.websocket.*
+import io.ktor.websocket.*
+import java.time.Duration
 
 fun main(args: Array<String>) {
     io.ktor.server.netty.EngineMain.main(args)
@@ -81,6 +80,13 @@ fun Application.module() {
     migrateDatabase()     // Run migrations if needed
     seedDatabase()        // Seed the database
 
+    install(WebSockets) {
+        pingPeriod = Duration.ofSeconds(15)
+        timeout = Duration.ofSeconds(15)
+        maxFrameSize = Long.MAX_VALUE
+        masking = false
+    }
+
     routing {
         authRoutes()
         categoryRoutes()
@@ -109,5 +115,6 @@ fun Application.module() {
             notificationRoutes()
             restaurantOwnerRoutes()
         }
+        trackingRoutes()
     }
 }

@@ -59,4 +59,6 @@ dependencies {
     // Firebase Admin SDK
     implementation("com.google.firebase:firebase-admin:9.2.0")
 
+    implementation("io.ktor:ktor-server-websockets:1.6.0")
+
 }

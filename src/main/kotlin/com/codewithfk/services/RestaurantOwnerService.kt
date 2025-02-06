@@ -79,7 +79,8 @@ object RestaurantOwnerService {
                             createdAt = row[RestaurantsTable.createdAt].toString()
                         ),
                         createdAt = row[OrdersTable.createdAt].toString(),
-                        updatedAt = row[OrdersTable.updatedAt].toString()
+                        updatedAt = row[OrdersTable.updatedAt].toString(),
+                        riderId = row[OrdersTable.riderId]?.toString()
                     )
                 }
         }

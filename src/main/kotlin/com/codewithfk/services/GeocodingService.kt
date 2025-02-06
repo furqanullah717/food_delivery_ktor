@@ -9,7 +9,7 @@ import com.google.maps.model.LatLng
 import com.google.maps.model.AddressComponentType
 
 object GeocodingService {
-    private val geoApiContext = GeoApiContext.Builder()
+    val geoApiContext = GeoApiContext.Builder()
         .apiKey(GoogleConfigs.mapKey)
         .build()
 

@@ -94,6 +94,7 @@ object OrdersTable : Table("orders") {
     val totalAmount = double("total_amount")
     val createdAt = datetime("created_at").defaultExpression(org.jetbrains.exposed.sql.javatime.CurrentTimestamp())
     val updatedAt = datetime("updated_at").defaultExpression(org.jetbrains.exposed.sql.javatime.CurrentTimestamp())
+    val riderId = uuid("rider_id").references(UsersTable.id).nullable()
     
     override val primaryKey = PrimaryKey(id)
 }

@@ -13,7 +13,7 @@ object DatabaseFactory {
         val driverClassName = "com.mysql.cj.jdbc.Driver"
         val jdbcURL = "jdbc:mysql://localhost:3306/food_delivery"
         val user = "root"
-        val password = "root"  // Change this to your MySQL password
+        val password = "root"
 
         try {
             Class.forName(driverClassName)
@@ -30,10 +30,42 @@ object DatabaseFactory {
                     OrdersTable,
                     OrderItemsTable,
                     CartTable,
-                    NotificationsTable
+                    NotificationsTable,
+                    RiderLocationsTable,
+                    DeliveryRequestsTable
                 )
+
+                // Check if rider_id column exists
+                val riderIdExists = exec(
+                    """
+                                SELECT COUNT(*) 
+                                FROM information_schema.COLUMNS 
+                                WHERE TABLE_SCHEMA = DATABASE()
+                                AND TABLE_NAME = 'orders' 
+                                AND COLUMN_NAME = 'rider_id'
+                            """
+                ) { it.next(); it.getInt(1) } ?: 0 > 0
+
+                // Add rider_id column if it doesn't exist
+                if (!riderIdExists) {
+                    exec(
+                        """
+                        ALTER TABLE orders 
+                        ADD COLUMN rider_id VARCHAR(36) NULL;
+                    """
+                    )
+
+                    // Add foreign key constraint
+                    exec(
+                        """
+                        ALTER TABLE orders
+                        ADD CONSTRAINT fk_orders_rider
+                        FOREIGN KEY (rider_id) 
+                        REFERENCES users(id);
+                    """
+                    )
+                }
             }
-            
         } catch (e: Exception) {
             println("Database initialization failed: ${e.message}")
             throw e
@@ -45,53 +77,65 @@ fun Application.migrateDatabase() {
     transaction {
         try {
             // Migration 1: Add FCM token to users
-            val fcmTokenExists = exec("""
+            val fcmTokenExists = exec(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.COLUMNS 
                 WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME = 'users' 
                 AND COLUMN_NAME = 'fcm_token'
-            """) { it.next(); it.getInt(1) } ?: 0 > 0
+            """
+            ) { it.next(); it.getInt(1) } ?: 0 > 0
 
             if (!fcmTokenExists) {
-                exec("""
+                exec(
+                    """
                     ALTER TABLE users 
                     ADD COLUMN fcm_token VARCHAR(255) NULL
-                """)
+                """
+                )
                 println("Added fcm_token column to users table")
             }
 
             // Migration 2: Add category to menu_items
-            val categoryExists = exec("""
+            val categoryExists = exec(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.COLUMNS 
                 WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME = 'menu_items' 
                 AND COLUMN_NAME = 'category'
-            """) { it.next(); it.getInt(1) } ?: 0 > 0
+            """
+            ) { it.next(); it.getInt(1) } ?: 0 > 0
 
             if (!categoryExists) {
-                exec("""
+                exec(
+                    """
                     ALTER TABLE menu_items 
                     ADD COLUMN category VARCHAR(100) NULL
-                """)
+                """
+                )
                 println("Added category column to menu_items table")
             }
 
             // Migration 3: Add isAvailable to menu_items
-            val isAvailableExists = exec("""
+            val isAvailableExists = exec(
+                """
                 SELECT COUNT(*) 
                 FROM information_schema.COLUMNS 
                 WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME = 'menu_items' 
                 AND COLUMN_NAME = 'is_available'
-            """) { it.next(); it.getInt(1) } ?: 0 > 0
+            """
+            ) { it.next(); it.getInt(1) } ?: 0 > 0
 
             if (!isAvailableExists) {
-                exec("""
+                exec(
+                    """
                     ALTER TABLE menu_items 
                     ADD COLUMN is_available BOOLEAN DEFAULT TRUE
-                """)
+                """
+                )
                 println("Added is_available column to menu_items table")
             }
 
@@ -126,7 +170,7 @@ fun Application.seedDatabase() {
                 println("Seeding users...")
                 val owner1 = UUID.randomUUID()
                 val owner2 = UUID.randomUUID()
-                
+
                 // Insert owner1
                 UsersTable.insert {
                     it[id] = owner1
@@ -136,7 +180,7 @@ fun Application.seedDatabase() {
                     it[authProvider] = "email"
                     it[createdAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
                 }
-                
+
                 // Insert owner2
                 UsersTable.insert {
                     it[id] = owner2
@@ -146,7 +190,7 @@ fun Application.seedDatabase() {
                     it[authProvider] = "email"
                     it[createdAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
                 }
-                
+
                 owner1
             } else {
                 // Get existing owner1 ID
@@ -273,7 +317,8 @@ fun Application.seedDatabase() {
                     this[RestaurantsTable.latitude] = restaurant.third.first
                     this[RestaurantsTable.longitude] = restaurant.third.second
                     this[RestaurantsTable.imageUrl] = restaurant.first.second
-                    this[RestaurantsTable.categoryId] = categoryIds[restaurant.third.third] ?: error("Category not found: ${restaurant.third.third}")
+                    this[RestaurantsTable.categoryId] =
+                        categoryIds[restaurant.third.third] ?: error("Category not found: ${restaurant.third.third}")
                     this[RestaurantsTable.createdAt] = org.jetbrains.exposed.sql.javatime.CurrentTimestamp()
                 }
 
@@ -283,37 +328,87 @@ fun Application.seedDatabase() {
             // Seed menu items if none exist
             if (MenuItemsTable.selectAll().empty()) {
                 println("Seeding menu items...")
-                val restaurants = RestaurantsTable.selectAll().associate { it[RestaurantsTable.name] to it[RestaurantsTable.id] }
+                val restaurants =
+                    RestaurantsTable.selectAll().associate { it[RestaurantsTable.name] to it[RestaurantsTable.id] }
 
                 val menuItems = listOf(
                     Pair(
                         "Pizza Palace", listOf(
-                            Triple("Margherita Pizza", "Classic cheese pizza with fresh basil", 
-                                Pair(12.99, "https://foodbyjonister.com/wp-content/uploads/2020/01/pizzadough18.jpg")),
-                            Triple("Pepperoni Pizza", "Pepperoni, mozzarella, and marinara sauce", 
-                                Pair(14.99, "https://www.cobsbread.com/us/wp-content//uploads/2022/09/Pepperoni-pizza-850x630-1.png")),
-                            Triple("Veggie Supreme", "Loaded with bell peppers, onions, and olives", 
-                                Pair(13.99, "https://www.thecandidcooks.com/wp-content/uploads/2022/07/california-veggie-pizza-feature.jpg")),
-                            Triple("Special Pizza", "Classic cheese pizza with fresh basil", 
-                                Pair(21.99, "https://eatlanders.com/wp-content/uploads/2021/05/new-pizza-pic-e1672671486218.jpeg")),
-                            Triple("Crown Crust Pizza", "Pepperoni, mozzarella, and marinara sauce", 
-                                Pair(19.99, "https://wenewsenglish.pk/wp-content/uploads/2024/05/Recipe-1.jpg")),
-                            Triple("Thin Crust Supreme", "Loaded with bell peppers, onions, and olives",
-                                Pair(18.99, "https://cdn.apartmenttherapy.info/image/upload/f_jpg,q_auto:eco,c_fill,g_auto,w_1500,ar_4:3/k%2Farchive%2Fcb2e9502cd9da3468caa944e15527b19bce68a8e")),
-                            Triple("Malai Boti Pizza", "Classic cheese pizza with fresh basil", 
-                                Pair(14.99, "https://www.tastekahani.com/wp-content/uploads/2022/05/71.Malai-Boti-Pizza.jpg")),
-                            Triple("Tikka Pizza", "Pepperoni, mozzarella, and marinara sauce", 
-                                Pair(16.99, "https://onestophalal.com/cdn/shop/articles/tikka_masala_pizza-1694014914105_1200x.jpg?v=1694568363")),
-                            Triple("Cheeze Crust Supreme", "Loaded with bell peppers, onions, and olives",
-                                Pair(17.99, "https://www.allrecipes.com/thmb/ofh4mVETQPBbcOb4uCFQr92cqb4=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/2612551-cheesy-crust-skillet-pizza-The-Gruntled-Gourmand-1x1-1-f9a328af9dfe487a9fc408f581927696.jpg"))
+                            Triple(
+                                "Margherita Pizza", "Classic cheese pizza with fresh basil",
+                                Pair(12.99, "https://foodbyjonister.com/wp-content/uploads/2020/01/pizzadough18.jpg")
+                            ),
+                            Triple(
+                                "Pepperoni Pizza", "Pepperoni, mozzarella, and marinara sauce",
+                                Pair(
+                                    14.99,
+                                    "https://www.cobsbread.com/us/wp-content//uploads/2022/09/Pepperoni-pizza-850x630-1.png"
+                                )
+                            ),
+                            Triple(
+                                "Veggie Supreme", "Loaded with bell peppers, onions, and olives",
+                                Pair(
+                                    13.99,
+                                    "https://www.thecandidcooks.com/wp-content/uploads/2022/07/california-veggie-pizza-feature.jpg"
+                                )
+                            ),
+                            Triple(
+                                "Special Pizza", "Classic cheese pizza with fresh basil",
+                                Pair(
+                                    21.99,
+                                    "https://eatlanders.com/wp-content/uploads/2021/05/new-pizza-pic-e1672671486218.jpeg"
+                                )
+                            ),
+                            Triple(
+                                "Crown Crust Pizza", "Pepperoni, mozzarella, and marinara sauce",
+                                Pair(19.99, "https://wenewsenglish.pk/wp-content/uploads/2024/05/Recipe-1.jpg")
+                            ),
+                            Triple(
+                                "Thin Crust Supreme", "Loaded with bell peppers, onions, and olives",
+                                Pair(
+                                    18.99,
+                                    "https://cdn.apartmenttherapy.info/image/upload/f_jpg,q_auto:eco,c_fill,g_auto,w_1500,ar_4:3/k%2Farchive%2Fcb2e9502cd9da3468caa944e15527b19bce68a8e"
+                                )
+                            ),
+                            Triple(
+                                "Malai Boti Pizza", "Classic cheese pizza with fresh basil",
+                                Pair(
+                                    14.99,
+                                    "https://www.tastekahani.com/wp-content/uploads/2022/05/71.Malai-Boti-Pizza.jpg"
+                                )
+                            ),
+                            Triple(
+                                "Tikka Pizza", "Pepperoni, mozzarella, and marinara sauce",
+                                Pair(
+                                    16.99,
+                                    "https://onestophalal.com/cdn/shop/articles/tikka_masala_pizza-1694014914105_1200x.jpg?v=1694568363"
+                                )
+                            ),
+                            Triple(
+                                "Cheeze Crust Supreme", "Loaded with bell peppers, onions, and olives",
+                                Pair(
+                                    17.99,
+                                    "https://www.allrecipes.com/thmb/ofh4mVETQPBbcOb4uCFQr92cqb4=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/2612551-cheesy-crust-skillet-pizza-The-Gruntled-Gourmand-1x1-1-f9a328af9dfe487a9fc408f581927696.jpg"
+                                )
+                            )
                         )
                     ),
                     Pair(
                         "Burger Haven", listOf(
-                            Triple("Classic Cheeseburger", "Juicy beef patty with cheddar cheese", 
-                                Pair(10.99, "https://rhubarbandcod.com/wp-content/uploads/2022/06/The-Classic-Cheeseburger-1.jpg")),
-                            Triple("Veggie Burger", "Grilled veggie patty with avocado", 
-                                Pair(9.99, "https://www.foodandwine.com/thmb/pwFie7NRkq4SXMDJU6QKnUKlaoI=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/Ultimate-Veggie-Burgers-FT-Recipe-0821-5d7532c53a924a7298d2175cf1d4219f.jpg"))
+                            Triple(
+                                "Classic Cheeseburger", "Juicy beef patty with cheddar cheese",
+                                Pair(
+                                    10.99,
+                                    "https://rhubarbandcod.com/wp-content/uploads/2022/06/The-Classic-Cheeseburger-1.jpg"
+                                )
+                            ),
+                            Triple(
+                                "Veggie Burger", "Grilled veggie patty with avocado",
+                                Pair(
+                                    9.99,
+                                    "https://www.foodandwine.com/thmb/pwFie7NRkq4SXMDJU6QKnUKlaoI=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/Ultimate-Veggie-Burgers-FT-Recipe-0821-5d7532c53a924a7298d2175cf1d4219f.jpg"
+                                )
+                            )
                         )
                     )
                 )
