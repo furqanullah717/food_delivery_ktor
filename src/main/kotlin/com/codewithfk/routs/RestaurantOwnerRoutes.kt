@@ -86,6 +86,71 @@ fun Route.restaurantOwnerRoutes() {
                     call.respondError(HttpStatusCode.NotFound, "Restaurant not found")
                 }
             }
+
+            // Accept/Reject order
+            post("/orders/{orderId}/action") {
+                val ownerId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+                    ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+                
+                val orderId = call.parameters["orderId"] ?: return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "Order ID is required"
+                )
+                
+                val request = call.receive<OrderActionRequest>()
+                
+                try {
+                    OrderService.handleOrderAction(
+                        orderId = UUID.fromString(orderId),
+                        ownerId = UUID.fromString(ownerId),
+                        action = request.action,
+                        reason = request.reason
+                    )
+                    call.respond(mapOf("message" to "Order ${request.action.toLowerCase()} successfully"))
+                } catch (e: IllegalStateException) {
+                    call.respondError(HttpStatusCode.BadRequest, e.message ?: "Error processing order action")
+                }
+            }
+
+            // Update order status
+            patch("/orders/{orderId}/status") {
+                val ownerId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+                    ?: return@patch call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+                
+                val orderId = call.parameters["orderId"] ?: return@patch call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "Order ID is required"
+                )
+                
+                val request = call.receive<UpdateOrderStatusRequest>()
+                
+                try {
+                    // Validate status transition
+                    val validTransitions = mapOf(
+                        OrderStatus.ACCEPTED.name to OrderStatus.PREPARING.name,
+                        OrderStatus.PREPARING.name to OrderStatus.READY.name,
+                        OrderStatus.READY.name to OrderStatus.OUT_FOR_DELIVERY.name
+                    )
+                    
+                    // Get current order status
+                    val currentStatus = OrderService.getOrderDetails(UUID.fromString(orderId)).status
+                    
+                    if (validTransitions[currentStatus] != request.status) {
+                        return@patch call.respondError(
+                            HttpStatusCode.BadRequest,
+                            "Invalid status transition from $currentStatus to ${request.status}"
+                        )
+                    }
+                    
+                    OrderService.updateOrderStatus(
+                        orderId = UUID.fromString(orderId),
+                        status = request.status
+                    )
+                    call.respond(mapOf("message" to "Order status updated successfully"))
+                } catch (e: IllegalStateException) {
+                    call.respondError(HttpStatusCode.BadRequest, e.message ?: "Error updating order status")
+                }
+            }
         }
     }
 } 

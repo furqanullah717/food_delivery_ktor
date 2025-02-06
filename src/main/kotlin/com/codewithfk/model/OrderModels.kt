@@ -37,3 +37,22 @@ data class AddToCartRequest(
     val menuItemId: String,
     val quantity: Int
 )
+
+// Add these order statuses as an enum
+enum class OrderStatus {
+    PENDING_ACCEPTANCE, // Initial state when order is placed
+    ACCEPTED,          // Restaurant accepted the order
+    PREPARING,         // Food is being prepared
+    READY,            // Ready for delivery/pickup
+    OUT_FOR_DELIVERY, // Rider picked up
+    DELIVERED,        // Order completed
+    REJECTED,         // Restaurant rejected the order
+    CANCELLED         // Customer cancelled
+}
+
+// Add order action request model
+@Serializable
+data class OrderActionRequest(
+    val action: String, // "ACCEPT", "REJECT"
+    val reason: String? = null
+)

@@ -82,10 +82,24 @@ object OrderService {
                 it[this.restaurantId] = restaurantId
                 it[this.addressId] = UUID.fromString(request.addressId)
                 it[this.totalAmount] = totalAmount
-                it[this.status] = "Pending"
+                it[this.status] = OrderStatus.PENDING_ACCEPTANCE.name
                 it[this.paymentStatus] = if (paymentIntentId != null) "Paid" else "Pending"
                 it[this.stripePaymentIntentId] = paymentIntentId
             } get OrdersTable.id
+
+            // Notify restaurant about new order
+            val restaurantOwner = RestaurantsTable
+                .select { RestaurantsTable.id eq restaurantId }
+                .map { it[RestaurantsTable.ownerId] }
+                .single()
+
+            NotificationService.createNotification(
+                userId = restaurantOwner,
+                title = "New Order Received",
+                message = "Order #${orderId.toString().take(8)} is waiting for acceptance",
+                type = "NEW_ORDER",
+                orderId = orderId
+            )
 
             // Create order items
             cartItems.forEach { cartItem ->
@@ -292,6 +306,61 @@ object OrderService {
                     )
                 }
                 .singleOrNull())
+        }
+    }
+
+    fun handleOrderAction(orderId: UUID, ownerId: UUID, action: String, reason: String? = null): Boolean {
+        return transaction {
+            // Verify restaurant ownership
+            val order = OrdersTable
+                .join(RestaurantsTable, JoinType.INNER, OrdersTable.restaurantId, RestaurantsTable.id)
+                .select { 
+                    (OrdersTable.id eq orderId) and 
+                    (RestaurantsTable.ownerId eq ownerId) 
+                }
+                .firstOrNull() ?: throw IllegalStateException("Order not found or unauthorized")
+
+            val currentStatus = order[OrdersTable.status]
+            if (currentStatus != OrderStatus.PENDING_ACCEPTANCE.name) {
+                throw IllegalStateException("Order cannot be ${action.toLowerCase()} in status: $currentStatus")
+            }
+
+            val newStatus = when (action.toUpperCase()) {
+                "ACCEPT" -> OrderStatus.ACCEPTED
+                "REJECT" -> OrderStatus.REJECTED
+                else -> throw IllegalArgumentException("Invalid action: $action")
+            }
+
+            // Update order status
+            OrdersTable.update({ OrdersTable.id eq orderId }) {
+                it[status] = newStatus.name
+            }
+
+            // Notify customer
+            val customerId = order[OrdersTable.userId]
+            val message = when (newStatus) {
+                OrderStatus.ACCEPTED -> "Your order has been accepted and will be prepared soon"
+                OrderStatus.REJECTED -> "Your order was rejected${reason?.let { " - $it" } ?: ""}"
+                else -> throw IllegalStateException("Unexpected status")
+            }
+
+            NotificationService.createNotification(
+                userId = customerId,
+                title = "Order Update",
+                message = message,
+                type = "ORDER_STATUS",
+                orderId = orderId
+            )
+
+            // If rejected, initiate refund if payment was made
+            if (newStatus == OrderStatus.REJECTED) {
+                order[OrdersTable.stripePaymentIntentId]?.let { paymentIntentId ->
+                    // Implement refund logic
+                    // PaymentService.initiateRefund(paymentIntentId)
+                }
+            }
+
+            true
         }
     }
 }
