@@ -1,6 +1,7 @@
 package com.codewithfk.routs
 
 import com.codewithfk.JwtConfig
+import com.codewithfk.model.UserRole
 import com.codewithfk.services.AuthService
 import com.codewithfk.utils.respondError
 import io.ktor.http.*
@@ -43,7 +44,19 @@ fun Route.authRoutes() {
             status = HttpStatusCode.BadRequest
         )
 
-        val token = AuthService.login(email, passwordHash)
+        val packageName = call.request.header("X-Package-Name")
+            ?: return@post call.respondError(
+                HttpStatusCode.BadRequest,
+                "Package name header is required"
+            )
+
+        val userType = when(packageName){
+            "com.codewithfk.foodhub" -> UserRole.CUSTOMER
+            "com.codewithfk.foodhub.restaurant" -> UserRole.OWNER
+            "com.codewithfk.foodhub.rider" -> UserRole.RIDER
+            else -> UserRole.CUSTOMER
+        }
+        val token = AuthService.login(email, passwordHash,userType)
         if (token != null) {
             call.respond(mapOf("token" to token))
         } else {

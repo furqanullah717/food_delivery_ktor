@@ -48,10 +48,10 @@ object AuthService {
         }
     }
 
-    fun login(email: String, passwordHash: String): String? {
+    fun login(email: String, passwordHash: String, userRole: UserRole): String? {
         return transaction {
             val user = UsersTable.select {
-                (UsersTable.email eq email) and (UsersTable.passwordHash eq passwordHash)
+                (UsersTable.email eq email) and (UsersTable.passwordHash eq passwordHash) and (UsersTable.role.lowerCase() eq userRole.name.lowercase())
             }.singleOrNull()
 
             user?.let {

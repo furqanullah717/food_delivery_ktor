@@ -165,15 +165,17 @@ fun Application.migrateDatabase() {
 fun Application.seedDatabase() {
     environment.monitor.subscribe(ApplicationStarted) {
         transaction {
+            val owner1Id = UUID.randomUUID()
+            val owner2Id = UUID.randomUUID()
+            val riderId = UUID.randomUUID()  // Add rider ID
             // Seed users if none exist
-            val owner1Id = if (UsersTable.selectAll().empty()) {
+            if (UsersTable.selectAll().empty()) {
                 println("Seeding users...")
-                val owner1 = UUID.randomUUID()
-                val owner2 = UUID.randomUUID()
+
 
                 // Insert owner1
                 UsersTable.insert {
-                    it[id] = owner1
+                    it[id] = owner1Id
                     it[email] = "owner1@example.com"
                     it[name] = "Restaurant Owner"
                     it[role] = "OWNER"
@@ -183,21 +185,37 @@ fun Application.seedDatabase() {
 
                 // Insert owner2
                 UsersTable.insert {
-                    it[id] = owner2
+                    it[id] = owner2Id
                     it[email] = "owner2@example.com"
                     it[name] = "Another Owner"
                     it[role] = "OWNER"
                     it[authProvider] = "email"
                     it[createdAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
                 }
+            }
 
-                owner1
-            } else {
-                // Get existing owner1 ID
-                UsersTable
-                    .select { UsersTable.email eq "owner1@example.com" }
-                    .map { it[UsersTable.id] }
-                    .firstOrNull() ?: error("owner1@example.com not found")
+            if(UsersTable.select { UsersTable.role eq "rider" }.empty()){
+                UsersTable.insert {
+                    it[id] = riderId
+                    it[email] = "rider@example.com"
+                    it[name] = "Default Rider"
+                    it[role] = "RIDER"
+                    it[authProvider] = "email"
+                    it[passwordHash] = "111111" // Add hashed password
+                    it[createdAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
+                }
+
+                println("Seeded default users: owner1@example.com, owner2@example.com, rider@example.com")
+                println("Default password for all users: password123")
+
+                // Add initial rider location
+                RiderLocationsTable.insert {
+                    it[this.riderId] = riderId
+                    it[latitude] = 37.7749 // Default San Francisco coordinates
+                    it[longitude] = -122.4194
+                    it[isAvailable] = true
+                    it[lastUpdated] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
+                }
             }
 
             // Seed categories if none exist
