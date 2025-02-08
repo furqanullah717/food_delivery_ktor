@@ -45,10 +45,6 @@ fun Route.authRoutes() {
         )
 
         val packageName = call.request.header("X-Package-Name")
-            ?: return@post call.respondError(
-                HttpStatusCode.BadRequest,
-                "Package name header is required"
-            )
 
         val userType = when(packageName){
             "com.codewithfk.foodhub" -> UserRole.CUSTOMER
