@@ -1,5 +1,6 @@
 package com.codewithfk.database
 
+import com.codewithfk.database.migrations.updateOwnerPassword
 import com.codewithfk.model.Category
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -153,6 +154,9 @@ fun Application.migrateDatabase() {
             } else {
                 println("Warning: owner1@example.com not found, skipping restaurant ownership migration")
             }
+
+            // Update owner password
+            updateOwnerPassword()
 
             println("All migrations completed successfully")
         } catch (e: Exception) {
