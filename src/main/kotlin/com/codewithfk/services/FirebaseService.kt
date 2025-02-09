@@ -11,7 +11,7 @@ import java.io.FileInputStream
 object FirebaseService {
     init {
         try {
-            val serviceAccount = FileInputStream("/Users/furqan/Downloads/foodhub-11c1d-firebase-adminsdk-fbsvc-f4c57777a0.json")
+            val serviceAccount = FileInputStream("/Users/furqan/Downloads/foodhub-11c1d-firebase-adminsdk-fbsvc-f32c170837.json")
             val options = FirebaseOptions.builder()
                 .setCredentials(GoogleCredentials.fromStream(serviceAccount))
                 .build()

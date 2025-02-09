@@ -37,7 +37,8 @@ object RestaurantOwnerService {
                                 id = itemRow[OrderItemsTable.id].toString(),
                                 orderId = orderId.toString(),
                                 menuItemId = itemRow[OrderItemsTable.menuItemId].toString(),
-                                quantity = itemRow[OrderItemsTable.quantity]
+                                quantity = itemRow[OrderItemsTable.quantity],
+                                menuItemName = itemRow[MenuItemsTable.name]
                             )
                         }
 

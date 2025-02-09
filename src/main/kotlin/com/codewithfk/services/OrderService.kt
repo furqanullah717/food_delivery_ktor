@@ -88,16 +88,17 @@ object OrderService {
                 it[this.riderId] = null
             } get OrdersTable.id
 
-            // Notify restaurant about new order
-            val restaurantOwner = RestaurantsTable
+            // Get restaurant owner's ID
+            val restaurantOwnerId = RestaurantsTable
                 .select { RestaurantsTable.id eq restaurantId }
                 .map { it[RestaurantsTable.ownerId] }
                 .single()
 
+            // Send notification to restaurant owner
             NotificationService.createNotification(
-                userId = restaurantOwner,
+                userId = restaurantOwnerId,
                 title = "New Order Received",
-                message = "Order #${orderId.toString().take(8)} is waiting for acceptance",
+                message = "New order #${orderId.toString().take(8)} worth $${totalAmount} is waiting for acceptance",
                 type = "NEW_ORDER",
                 orderId = orderId
             )
@@ -328,11 +329,13 @@ object OrderService {
         return OrderItemsTable
             .select { OrderItemsTable.orderId eq orderId }
             .map { row ->
+                val item = MenuItemsTable.select({ MenuItemsTable.id eq row[OrderItemsTable.menuItemId] }).single()
                 OrderItem(
                     id = row[OrderItemsTable.id].toString(),
                     orderId = orderId.toString(),
                     menuItemId = row[OrderItemsTable.menuItemId].toString(),
-                    quantity = row[OrderItemsTable.quantity]
+                    quantity = row[OrderItemsTable.quantity],
+                    menuItemName = item[MenuItemsTable.name]
                 )
             }
     }

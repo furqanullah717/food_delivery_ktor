@@ -29,7 +29,8 @@ data class OrderItem(
     val id: String,
     val orderId: String,
     val menuItemId: String,
-    val quantity: Int
+    val quantity: Int,
+    val menuItemName:String?
 )
 
 @Serializable

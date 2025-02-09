@@ -26,7 +26,7 @@ fun Route.restaurantOwnerRoutes() {
                     UUID.fromString(ownerId),
                     status
                 )
-                call.respond(orders)
+                call.respond(mapOf("orders" to orders))
             }
 
             // Update order status
