@@ -99,7 +99,7 @@ object OrderService {
                 userId = restaurantOwnerId,
                 title = "New Order Received",
                 message = "New order #${orderId.toString().take(8)} worth $${totalAmount} is waiting for acceptance",
-                type = "NEW_ORDER",
+                type = "order",
                 orderId = orderId
             )
 
