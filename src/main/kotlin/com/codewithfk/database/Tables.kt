@@ -19,6 +19,16 @@ object UsersTable : Table("users") {
     override val primaryKey: PrimaryKey
         get() = PrimaryKey(id)
 }
+object RiderRejectionsTable : Table("rider_rejections") {
+    val id = uuid("id").autoGenerate()
+    val riderId = uuid("rider_id").references(UsersTable.id)
+    val orderId = uuid("order_id").references(OrdersTable.id)
+    val createdAt = datetime("created_at").defaultExpression(org.jetbrains.exposed.sql.javatime.CurrentDateTime())
+
+    override val primaryKey: PrimaryKey
+        get() = PrimaryKey(UsersTable.id)
+}
+
 
 object CategoriesTable : Table("categories") {
     val id = uuid("id").autoGenerate()

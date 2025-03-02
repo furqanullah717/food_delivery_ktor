@@ -33,7 +33,8 @@ object DatabaseFactory {
                     CartTable,
                     NotificationsTable,
                     RiderLocationsTable,
-                    DeliveryRequestsTable
+                    DeliveryRequestsTable,
+                    RiderRejectionsTable
                 )
 
                 // Check if rider_id column exists

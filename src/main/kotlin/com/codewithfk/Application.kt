@@ -93,6 +93,7 @@ fun Application.module() {
         restaurantRoutes()
         menuItemRoutes()
         imageRoutes()
+        riderRoutes()
         post("/payments/webhook") {
             try {
                 val payload = call.receiveText()

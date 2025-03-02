@@ -47,7 +47,7 @@ fun Route.riderRoutes() {
                 if (accepted) {
                     call.respond(mapOf("message" to "Delivery request accepted"))
                 } else {
-                    call.respondError(HttpStatusCode.BadRequest, "Failed to accept delivery request")
+                    call.respondError(HttpStatusCode.BadRequest, "Failed to accept delivery request. Order may have been taken by another rider.")
                 }
             }
 
@@ -74,7 +74,7 @@ fun Route.riderRoutes() {
                     ?: return@get call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
 
                 val deliveries = RiderService.getAvailableDeliveries(UUID.fromString(riderId))
-                call.respond(deliveries)
+                call.respond(mapOf("data" to  deliveries))
             }
 
             // Reject delivery request
@@ -95,7 +95,7 @@ fun Route.riderRoutes() {
                 if (rejected) {
                     call.respond(mapOf("message" to "Delivery request rejected"))
                 } else {
-                    call.respondError(HttpStatusCode.BadRequest, "Failed to reject delivery request")
+                    call.respondError(HttpStatusCode.BadRequest, "Failed to reject delivery request. Order may not be available anymore.")
                 }
             }
 
@@ -128,6 +128,15 @@ fun Route.riderRoutes() {
                 } catch (e: IllegalStateException) {
                     call.respondError(HttpStatusCode.NotFound, e.message ?: "Order not found")
                 }
+            }
+
+            // Get active deliveries (assigned to this rider)
+            get("/deliveries/active") {
+                val riderId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+                    ?: return@get call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+
+                val activeDeliveries = RiderService.getActiveDeliveries(UUID.fromString(riderId))
+                call.respond(mapOf("data" to activeDeliveries))
             }
         }
     }

@@ -68,4 +68,46 @@ enum class DeliveryStatus {
     PICKED_UP,
     DELIVERED,
     FAILED
-} 
+}
+
+@Serializable
+data class RiderDelivery(
+    val orderId: String,
+    val status: String,
+    val restaurant: RestaurantDetail,
+    val customer: CustomerAddress,
+    val items: List<OrderItemDetail>,
+    val totalAmount: Double,
+    val estimatedEarning: Double,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+@Serializable
+data class RestaurantDetail(
+    val id: String,
+    val name: String,
+    val address: String,
+    val latitude: Double,
+    val longitude: Double,
+    val imageUrl: String
+)
+
+@Serializable
+data class CustomerAddress(
+    val addressLine1: String,
+    val addressLine2: String? = null,
+    val city: String,
+    val state: String? = null,
+    val zipCode: String,
+    val latitude: Double,
+    val longitude: Double
+)
+
+@Serializable
+data class OrderItemDetail(
+    val id: String,
+    val name: String,
+    val quantity: Int,
+    val price: Double
+) 

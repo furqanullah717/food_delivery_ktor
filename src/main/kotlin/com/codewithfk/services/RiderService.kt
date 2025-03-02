@@ -12,7 +12,7 @@ import java.util.*
 import kotlin.math.*
 
 object RiderService {
-    private const val SEARCH_RADIUS_KM = 5.0
+    private const val SEARCH_RADIUS_KM = 6371.0
     private const val EARTH_RADIUS_KM = 6371.0
 
     fun updateRiderLocation(riderId: UUID, latitude: Double, longitude: Double) {
@@ -141,68 +141,78 @@ object RiderService {
 
     fun acceptDeliveryRequest(riderId: UUID, orderId: UUID): Boolean {
         return transaction {
-            try {
-                // Accept the request
-                val accepted = DeliveryRequestsTable.update({ 
-                    (DeliveryRequestsTable.orderId eq orderId) and
-                    (DeliveryRequestsTable.riderId eq riderId) and
-                    (DeliveryRequestsTable.status eq "PENDING")
-                }) {
-                    it[status] = "ACCEPTED"
-                } > 0
-
-                if (accepted) {
-                    // Cancel other requests
-                    DeliveryRequestsTable.update({
-                        (DeliveryRequestsTable.orderId eq orderId) and
-                        (DeliveryRequestsTable.riderId neq riderId)
-                    }) {
-                        it[status] = "CANCELLED"
-                    }
-
-                    // Update order with rider ID
-                    OrdersTable.update({ OrdersTable.id eq orderId }) {
-                        it[OrdersTable.riderId] = riderId
-                        it[status] = OrderStatus.ACCEPTED.name
-                    }
-
-                    // Notify stakeholders
-                    notifyOrderAccepted(orderId)
-                }
-                accepted
-            } catch (e: Exception) {
-                false
+            // Check if order is available (READY status and no assigned rider)
+            val order = OrdersTable.select { 
+                (OrdersTable.id eq orderId) and 
+                (OrdersTable.status eq OrderStatus.READY.name) and
+                (OrdersTable.riderId.isNull())
+            }.firstOrNull() ?: return@transaction false
+            
+            // Update order to assign it to rider
+            val updated = OrdersTable.update({ OrdersTable.id eq orderId }) {
+                it[OrdersTable.riderId] = riderId
+                it[OrdersTable.status] = OrderStatus.ASSIGNED.name
+                it[OrdersTable.updatedAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
+            } > 0
+            
+            if (updated) {
+                // Notify customer
+                val customerId = order[OrdersTable.userId]
+                NotificationService.createNotification(
+                    userId = customerId,
+                    title = "Delivery Update",
+                    message = "Your order has been assigned to a rider and will be picked up soon",
+                    type = "DELIVERY_STATUS",
+                    orderId = orderId
+                )
+                
+                // Notify restaurant
+                val restaurantId = order[OrdersTable.restaurantId]
+                val restaurantOwnerId = RestaurantsTable
+                    .select { RestaurantsTable.id eq restaurantId }
+                    .map { it[RestaurantsTable.ownerId] }
+                    .single()
+                    
+                NotificationService.createNotification(
+                    userId = restaurantOwnerId,
+                    title = "Rider Assigned",
+                    message = "A rider has been assigned to pick up order #${orderId.toString().take(8)}",
+                    type = "DELIVERY_STATUS",
+                    orderId = orderId
+                )
             }
+            
+            updated
         }
     }
 
-    private fun notifyOrderAccepted(orderId: UUID) {
-        val order = OrderService.getOrderDetails(orderId)
-        
-        // Notify customer
-        NotificationService.createNotification(
-            userId = UUID.fromString(order.userId),
-            title = "Rider Assigned",
-            message = "A rider has been assigned to your order",
-            type = "ORDER_UPDATE",
-            orderId = orderId
-        )
-
-        // Notify restaurant
-        val restaurantOwnerId = transaction {
-            RestaurantsTable
-                .select { RestaurantsTable.id eq UUID.fromString(order.restaurantId) }
-                .map { it[RestaurantsTable.ownerId] }
-                .single()
+    fun rejectDeliveryRequest(riderId: UUID, orderId: UUID): Boolean {
+        return transaction {
+            // We don't modify the order directly when rejecting,
+            // instead we track rejections in a new table to avoid showing
+            // this delivery to this rider again
+            
+            // First check if the order is still available
+            val orderExists = OrdersTable.select { 
+                (OrdersTable.id eq orderId) and 
+                (OrdersTable.status eq OrderStatus.READY.name) and
+                (OrdersTable.riderId.isNull())
+            }.count() > 0
+            
+            if (!orderExists) {
+                return@transaction false
+            }
+            
+            // Instead of using DeliveryRequestsTable, we'll track rejections in RiderRejections table
+            // This table needs to be created if it doesn't exist
+            RiderRejectionsTable.insert {
+                it[this.riderId] = riderId
+                it[this.orderId] = orderId
+                it[this.createdAt] = org.jetbrains.exposed.sql.javatime.CurrentDateTime()
+            }
+            
+            true
         }
-
-        NotificationService.createNotification(
-            userId = restaurantOwnerId,
-            title = "Rider Assigned",
-            message = "A rider has been assigned to order #${orderId.toString().take(8)}",
-            type = "ORDER_UPDATE",
-            orderId = orderId
-        )
     }
 
     fun getDeliveryPath(riderId: UUID, orderId: UUID): DeliveryPath {
@@ -300,50 +310,56 @@ object RiderService {
         return transaction {
             // Get rider's current location
             val riderLocation = getRiderLocation(riderId)
-
-            // Find orders that need delivery and haven't been assigned to riders
-            (OrdersTable
-                .join(RestaurantsTable, JoinType.INNER)
+            
+            // Get IDs of orders this rider has rejected
+            val rejectedOrderIds = RiderRejectionsTable
+                .select { RiderRejectionsTable.riderId eq riderId }
+                .map { it[RiderRejectionsTable.orderId] }
+                .toSet()
+                
+            // Find orders that are ready and haven't been assigned to riders
+            // and haven't been rejected by this rider
+            val query = (OrdersTable
+                .join(RestaurantsTable, JoinType.INNER, OrdersTable.restaurantId, RestaurantsTable.id)
                 .select {
                     (OrdersTable.status eq OrderStatus.READY.name) and
                     (OrdersTable.riderId.isNull())
                 })
-                .map { row ->
-                    val restaurantLat = row[RestaurantsTable.latitude]
-                    val restaurantLng = row[RestaurantsTable.longitude]
+                
+            query.mapNotNull { row ->
+                val orderId = row[OrdersTable.id]
+                
+                // Skip if rider has already rejected this order
+                if (orderId in rejectedOrderIds) {
+                    return@mapNotNull null
+                }
+                
+                val restaurantLat = row[RestaurantsTable.latitude]
+                val restaurantLng = row[RestaurantsTable.longitude]
+                
+                // Calculate distance between rider and restaurant
+                val distance = calculateDistance(
+                    riderLocation.latitude, riderLocation.longitude,
+                    restaurantLat, restaurantLng
+                )
+
+                // Only show deliveries within reasonable distance (e.g., 5km)
+                if (distance <= SEARCH_RADIUS_KM) {
+                    // Get customer address
+                    val customerAddress = getOrderAddress(row[OrdersTable.addressId])
                     
-                    // Calculate distance between rider and restaurant
-                    val distance = calculateDistance(
-                        riderLocation.latitude, riderLocation.longitude,
-                        restaurantLat, restaurantLng
+                    AvailableDelivery(
+                        orderId = orderId.toString(),
+                        restaurantName = row[RestaurantsTable.name],
+                        restaurantAddress = row[RestaurantsTable.address],
+                        customerAddress = customerAddress?.addressLine1 ?: "",
+                        orderAmount = row[OrdersTable.totalAmount],
+                        estimatedDistance = distance,
+                        estimatedEarning = calculateEarnings(distance, row[OrdersTable.totalAmount]),
+                        createdAt = row[OrdersTable.createdAt].toString()
                     )
-
-                    // Only show deliveries within reasonable distance (e.g., 5km)
-                    if (distance <= SEARCH_RADIUS_KM) {
-                        AvailableDelivery(
-                            orderId = row[OrdersTable.id].toString(),
-                            restaurantName = row[RestaurantsTable.name],
-                            restaurantAddress = row[RestaurantsTable.address],
-                            customerAddress = getOrderAddress(row[OrdersTable.addressId])?.addressLine1 ?: "",
-                            orderAmount = row[OrdersTable.totalAmount],
-                            estimatedDistance = distance,
-                            estimatedEarning = calculateEarnings(distance, row[OrdersTable.totalAmount]),
-                            createdAt = row[OrdersTable.createdAt].toString()
-                        )
-                    } else null
-                }.filterNotNull()
-        }
-    }
-
-    fun rejectDeliveryRequest(riderId: UUID, orderId: UUID): Boolean {
-        return transaction {
-            DeliveryRequestsTable.update({ 
-                (DeliveryRequestsTable.orderId eq orderId) and
-                (DeliveryRequestsTable.riderId eq riderId) and
-                (DeliveryRequestsTable.status eq "PENDING")
-            }) {
-                it[status] = "REJECTED"
-            } > 0
+                } else null
+            }
         }
     }
 
@@ -402,4 +418,70 @@ object RiderService {
         
         return baseRate + (distance * perKmRate) + (orderAmount * orderPercentage)
     }
-} 
+
+    fun getActiveDeliveries(riderId: UUID): List<RiderDelivery> {
+        return transaction {
+            // Get orders assigned to this rider that are in active delivery states
+            (OrdersTable
+                .join(RestaurantsTable, JoinType.INNER, OrdersTable.restaurantId, RestaurantsTable.id)
+                .select {
+                    (OrdersTable.riderId eq riderId) and
+                    (OrdersTable.status inList listOf(
+                        OrderStatus.ASSIGNED.name,
+                        OrderStatus.OUT_FOR_DELIVERY.name
+                    ))
+                })
+                .orderBy(OrdersTable.updatedAt, SortOrder.DESC)
+                .map { row ->
+                    val orderId = row[OrdersTable.id]
+                    val customerAddress = getOrderAddress(row[OrdersTable.addressId])
+                    
+                    // Get order items
+                    val items = OrderItemsTable
+                        .join(MenuItemsTable, JoinType.INNER, OrderItemsTable.menuItemId, MenuItemsTable.id)
+                        .select { OrderItemsTable.orderId eq orderId }
+                        .map { itemRow ->
+                            OrderItemDetail(
+                                id = itemRow[OrderItemsTable.id].toString(),
+                                name = itemRow[MenuItemsTable.name],
+                                quantity = itemRow[OrderItemsTable.quantity],
+                                price = itemRow[MenuItemsTable.price]
+                            )
+                        }
+                    
+                    RiderDelivery(
+                        orderId = orderId.toString(),
+                        status = row[OrdersTable.status],
+                        restaurant = RestaurantDetail(
+                            id = row[RestaurantsTable.id].toString(),
+                            name = row[RestaurantsTable.name],
+                            address = row[RestaurantsTable.address],
+                            latitude = row[RestaurantsTable.latitude],
+                            longitude = row[RestaurantsTable.longitude],
+                            imageUrl = row[RestaurantsTable.imageUrl] ?: ""
+                        ),
+                        customer = CustomerAddress(
+                            addressLine1 = customerAddress?.addressLine1 ?: "",
+                            addressLine2 = customerAddress?.addressLine2,
+                            city = customerAddress?.city ?: "",
+                            state = customerAddress?.state,
+                            zipCode = customerAddress?.zipCode ?: "",
+                            latitude = customerAddress?.latitude ?: 0.0,
+                            longitude = customerAddress?.longitude ?: 0.0
+                        ),
+                        items = items,
+                        totalAmount = row[OrdersTable.totalAmount],
+                        estimatedEarning = calculateEarnings(
+                            calculateDistance(
+                                row[RestaurantsTable.latitude], row[RestaurantsTable.longitude],
+                                customerAddress?.latitude ?: 0.0, customerAddress?.longitude ?: 0.0
+                            ),
+                            row[OrdersTable.totalAmount]
+                        ),
+                        createdAt = row[OrdersTable.createdAt].toString(),
+                        updatedAt = row[OrdersTable.updatedAt].toString()
+                    )
+                }
+        }
+    }
+}
