@@ -67,6 +67,68 @@ fun Route.riderRoutes() {
                 )
                 call.respond(path)
             }
+
+            // Get available deliveries
+            get("/deliveries/available") {
+                val riderId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+                    ?: return@get call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+
+                val deliveries = RiderService.getAvailableDeliveries(UUID.fromString(riderId))
+                call.respond(deliveries)
+            }
+
+            // Reject delivery request
+            post("/deliveries/{orderId}/reject") {
+                val riderId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+                    ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+
+                val orderId = call.parameters["orderId"] ?: return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "Order ID is required"
+                )
+
+                val rejected = RiderService.rejectDeliveryRequest(
+                    UUID.fromString(riderId),
+                    UUID.fromString(orderId)
+                )
+
+                if (rejected) {
+                    call.respond(mapOf("message" to "Delivery request rejected"))
+                } else {
+                    call.respondError(HttpStatusCode.BadRequest, "Failed to reject delivery request")
+                }
+            }
+
+            // Update delivery status
+            post("/deliveries/{orderId}/status") {
+                val riderId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asString()
+                    ?: return@post call.respondError(HttpStatusCode.Unauthorized, "Unauthorized")
+
+                val orderId = call.parameters["orderId"] ?: return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "Order ID is required"
+                )
+
+                val statusUpdate = call.receive<DeliveryStatusUpdate>()
+                
+                try {
+                    val updated = RiderService.updateDeliveryStatus(
+                        UUID.fromString(riderId),
+                        UUID.fromString(orderId),
+                        statusUpdate
+                    )
+
+                    if (updated) {
+                        call.respond(mapOf("message" to "Delivery status updated successfully"))
+                    } else {
+                        call.respondError(HttpStatusCode.BadRequest, "Failed to update delivery status")
+                    }
+                } catch (e: IllegalArgumentException) {
+                    call.respondError(HttpStatusCode.BadRequest, e.message ?: "Invalid status update")
+                } catch (e: IllegalStateException) {
+                    call.respondError(HttpStatusCode.NotFound, e.message ?: "Order not found")
+                }
+            }
         }
     }
 } 

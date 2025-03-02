@@ -48,6 +48,7 @@ enum class OrderStatus {
     READY,            // Ready for delivery/pickup
     OUT_FOR_DELIVERY, // Rider picked up
     DELIVERED,        // Order completed
+    DELIVERY_FAILED,        // Order completed
     REJECTED,         // Restaurant rejected the order
     CANCELLED         // Customer cancelled
 }

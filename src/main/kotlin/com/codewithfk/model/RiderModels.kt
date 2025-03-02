@@ -41,4 +41,31 @@ data class DeliveryPath(
 enum class DeliveryPhase {
     TO_RESTAURANT,    // Rider heading to restaurant
     TO_CUSTOMER      // Rider heading to customer
+}
+
+@Serializable
+data class AvailableDelivery(
+    val orderId: String,
+    val restaurantName: String,
+    val restaurantAddress: String,
+    val customerAddress: String,
+    val orderAmount: Double,
+    val estimatedDistance: Double,
+    val estimatedEarning: Double,
+    val createdAt: String
+)
+
+@Serializable
+data class DeliveryStatusUpdate(
+    val status: String, // PICKED_UP, DELIVERED, FAILED
+    val reason: String? = null
+)
+
+enum class DeliveryStatus {
+    PENDING,
+    ACCEPTED,
+    REJECTED,
+    PICKED_UP,
+    DELIVERED,
+    FAILED
 } 

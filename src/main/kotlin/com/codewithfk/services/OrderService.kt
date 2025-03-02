@@ -305,24 +305,27 @@ object OrderService {
         }
     }
 
-    private fun getOrderAddress(addressId: UUID): Address? {
-        return AddressesTable
-            .select { AddressesTable.id eq addressId }
-            .map { row ->
-                Address(
-                    id = row[AddressesTable.id].toString(),
-                    userId = row[AddressesTable.userId].toString(),
-                    addressLine1 = row[AddressesTable.addressLine1],
-                    addressLine2 = row[AddressesTable.addressLine2],
-                    city = row[AddressesTable.city],
-                    state = row[AddressesTable.state],
-                    zipCode = row[AddressesTable.zipCode],
-                    country = row[AddressesTable.country],
-                    latitude = row[AddressesTable.latitude],
-                    longitude = row[AddressesTable.longitude]
-                )
-            }
-            .singleOrNull()
+    fun getOrderAddress(addressId: UUID?): Address? {
+        if (addressId == null) return null
+        
+        return transaction {
+            AddressesTable.select { AddressesTable.id eq addressId }
+                .map { row ->
+                    Address(
+                        id = row[AddressesTable.id].toString(),
+                        userId = row[AddressesTable.userId].toString(),
+                        addressLine1 = row[AddressesTable.addressLine1],
+                        addressLine2 = row[AddressesTable.addressLine2],
+                        city = row[AddressesTable.city],
+                        state = row[AddressesTable.state],
+                        country = row[AddressesTable.country],
+                        zipCode = row[AddressesTable.zipCode],
+                        latitude = row[AddressesTable.latitude],
+                        longitude = row[AddressesTable.longitude],
+                    )
+                }
+                .firstOrNull()
+        }
     }
 
     private fun getOrderItems(orderId: UUID): List<OrderItem> {
@@ -340,22 +343,24 @@ object OrderService {
             }
     }
 
-    private fun getRestaurantDetails(restaurantId: UUID): Restaurant? {
-        return RestaurantsTable
-            .select { RestaurantsTable.id eq restaurantId }
-            .map { row ->
-                Restaurant(
-                    id = row[RestaurantsTable.id].toString(),
-                    ownerId = row[RestaurantsTable.ownerId].toString(),
-                    name = row[RestaurantsTable.name],
-                    address = row[RestaurantsTable.address],
-                    categoryId = row[RestaurantsTable.categoryId].toString(),
-                    latitude = row[RestaurantsTable.latitude],
-                    longitude = row[RestaurantsTable.longitude],
-                    imageUrl = row[RestaurantsTable.imageUrl] ?: "",
-                    createdAt = row[RestaurantsTable.createdAt].toString()
-                )
-            }
-            .singleOrNull()
+    private fun getRestaurantDetails(restaurantId: UUID): Restaurant {
+        return transaction {
+            RestaurantsTable
+                .select { RestaurantsTable.id eq restaurantId }
+                .map { row ->
+                    Restaurant(
+                        id = row[RestaurantsTable.id].toString(),
+                        ownerId = row[RestaurantsTable.ownerId].toString(),
+                        name = row[RestaurantsTable.name],
+                        address = row[RestaurantsTable.address],
+                        categoryId = row[RestaurantsTable.categoryId].toString(),
+                        latitude = row[RestaurantsTable.latitude],
+                        longitude = row[RestaurantsTable.longitude],
+                        imageUrl = row[RestaurantsTable.imageUrl] ?: "",
+                        createdAt = row[RestaurantsTable.createdAt].toString()
+                    )
+                }
+                .first()
+        }
     }
 }

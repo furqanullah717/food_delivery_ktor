@@ -2,6 +2,7 @@ package com.codewithfk.services
 
 import com.codewithfk.database.*
 import com.codewithfk.model.*
+import com.codewithfk.services.OrderService.getOrderAddress
 import com.google.maps.DirectionsApi
 import com.google.maps.model.TravelMode
 import org.jetbrains.exposed.sql.*
@@ -293,5 +294,112 @@ object RiderService {
                 }
                 .firstOrNull() ?: throw IllegalStateException("Rider location not found")
         }
+    }
+
+    fun getAvailableDeliveries(riderId: UUID): List<AvailableDelivery> {
+        return transaction {
+            // Get rider's current location
+            val riderLocation = getRiderLocation(riderId)
+
+            // Find orders that need delivery and haven't been assigned to riders
+            (OrdersTable
+                .join(RestaurantsTable, JoinType.INNER)
+                .select {
+                    (OrdersTable.status eq OrderStatus.READY.name) and
+                    (OrdersTable.riderId.isNull())
+                })
+                .map { row ->
+                    val restaurantLat = row[RestaurantsTable.latitude]
+                    val restaurantLng = row[RestaurantsTable.longitude]
+                    
+                    // Calculate distance between rider and restaurant
+                    val distance = calculateDistance(
+                        riderLocation.latitude, riderLocation.longitude,
+                        restaurantLat, restaurantLng
+                    )
+
+                    // Only show deliveries within reasonable distance (e.g., 5km)
+                    if (distance <= SEARCH_RADIUS_KM) {
+                        AvailableDelivery(
+                            orderId = row[OrdersTable.id].toString(),
+                            restaurantName = row[RestaurantsTable.name],
+                            restaurantAddress = row[RestaurantsTable.address],
+                            customerAddress = getOrderAddress(row[OrdersTable.addressId])?.addressLine1 ?: "",
+                            orderAmount = row[OrdersTable.totalAmount],
+                            estimatedDistance = distance,
+                            estimatedEarning = calculateEarnings(distance, row[OrdersTable.totalAmount]),
+                            createdAt = row[OrdersTable.createdAt].toString()
+                        )
+                    } else null
+                }.filterNotNull()
+        }
+    }
+
+    fun rejectDeliveryRequest(riderId: UUID, orderId: UUID): Boolean {
+        return transaction {
+            DeliveryRequestsTable.update({ 
+                (DeliveryRequestsTable.orderId eq orderId) and
+                (DeliveryRequestsTable.riderId eq riderId) and
+                (DeliveryRequestsTable.status eq "PENDING")
+            }) {
+                it[status] = "REJECTED"
+            } > 0
+        }
+    }
+
+    fun updateDeliveryStatus(
+        riderId: UUID,
+        orderId: UUID,
+        statusUpdate: DeliveryStatusUpdate
+    ): Boolean {
+        return transaction {
+            // Verify rider is assigned to this order
+            val order = OrdersTable
+                .select { 
+                    (OrdersTable.id eq orderId) and
+                    (OrdersTable.riderId eq riderId)
+                }
+                .firstOrNull() ?: throw IllegalStateException("Order not found or unauthorized")
+
+            // Update order status
+            val updated = OrdersTable.update({ OrdersTable.id eq orderId }) {
+                it[status] = when (statusUpdate.status) {
+                    "PICKED_UP" -> OrderStatus.OUT_FOR_DELIVERY.name
+                    "DELIVERED" -> OrderStatus.DELIVERED.name
+                    "FAILED" -> OrderStatus.DELIVERY_FAILED.name
+                    else -> throw IllegalArgumentException("Invalid status: ${statusUpdate.status}")
+                }
+            } > 0
+
+            if (updated) {
+                // Notify customer
+                val customerId = order[OrdersTable.userId]
+                val message = when (statusUpdate.status) {
+                    "PICKED_UP" -> "Your order has been picked up and is on the way"
+                    "DELIVERED" -> "Your order has been delivered"
+                    "FAILED" -> "Delivery failed: ${statusUpdate.reason}"
+                    else -> throw IllegalArgumentException("Invalid status")
+                }
+
+                NotificationService.createNotification(
+                    userId = customerId,
+                    title = "Delivery Update",
+                    message = message,
+                    type = "DELIVERY_STATUS",
+                    orderId = orderId
+                )
+            }
+
+            updated
+        }
+    }
+
+    private fun calculateEarnings(distance: Double, orderAmount: Double): Double {
+        // Basic earnings calculation
+        val baseRate = 2.0 // Base rate in dollars
+        val perKmRate = 0.5 // Rate per kilometer
+        val orderPercentage = 0.05 // 5% of order amount
+        
+        return baseRate + (distance * perKmRate) + (orderAmount * orderPercentage)
     }
 } 
