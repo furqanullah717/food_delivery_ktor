@@ -57,3 +57,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Mysql data files ###
+mysql/
