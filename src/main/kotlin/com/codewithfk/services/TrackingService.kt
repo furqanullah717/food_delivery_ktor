@@ -88,6 +88,18 @@ object TrackingService {
     }
 
     suspend fun updateLocation(locationUpdate: LocationUpdate) {
+        // First update rider's location in database
+        try {
+            RiderService.updateRiderLocation(
+                riderId = UUID.fromString(locationUpdate.riderId),
+                latitude = locationUpdate.latitude,
+                longitude = locationUpdate.longitude
+            )
+        } catch (e: Exception) {
+            println("Failed to update rider location in database: ${e.message}")
+            // Continue with socket updates even if DB update fails
+        }
+
         val sessions = trackingSessions[locationUpdate.orderId] ?: return
         val cachedPath = lastCalculatedPaths[locationUpdate.orderId]
         
@@ -126,6 +138,7 @@ object TrackingService {
             updateCachedPath(cachedPath, locationUpdate)
         }
 
+        // Broadcast updates to all connected sessions
         sessions.forEach { session ->
             try {
                 session.socket.send(Frame.Text(Json.encodeToString(path)))
